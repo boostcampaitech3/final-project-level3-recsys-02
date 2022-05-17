@@ -39,6 +39,8 @@ class Broker:
         message )
         """
         try:
+            self.client = await nats.connect(self.host)
+            self.jetstream = self.client.jetstream()
             self.subscriber = await self.jetstream.pull_subscribe(subject, durable, stream)
             return True, await self.subscriber.consumer_info()
         except TimeoutError:
@@ -70,15 +72,24 @@ class Broker:
         except TimeoutError:
             return False, 'timed out on publishing a message'
 
-    async def pull(self, batchSize: int, timeout: float = 60.0):
+    async def pull(
+            self,
+            batchSize: int,
+            timeout: float = 60.0
+    ) -> list:
         """
         캐싱된 Payload 를 배치 사이즈만큼 가져옵니다.
 
         :param batchSize: determines the size of a list to pull
-        :return:
+        :param timeout: timeout
+        :return: a list of user request to be inferred
         """
         try:
             pulled = await self.subscriber.fetch(batchSize, timeout)
-            batch = [pickle.loads(message.data) for message in pulled]
+            batch = []
+            for message in pulled:
+                batch.append(pickle.loads(message.data))
+                message.ack()
+            return batch
         except TimeoutError:
             pass
