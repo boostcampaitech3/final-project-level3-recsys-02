@@ -14,4 +14,5 @@ async def root():
 
 @app.post('/UserRequest')
 async def request(data: orm.UserRequest):
-    pass
+    ack = await broker.publish('test-subject', data.dict(), 5.0, 'test-stream', {})
+    return ack
