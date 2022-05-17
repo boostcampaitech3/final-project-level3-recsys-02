@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jetstream-svc
+  labels:
+    app: jetstream
+spec:
+  selector:
+    app: jetstream
+  ports:
+  - name: tcp-client
+    port: 4222
+    protocol: TCP
+  - name: tcp-leafnodes
+    port: 7422
+    protocol: TCP
+  - name: http-monitor
+    port: 8222
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jetstream-hlsvc
+  labels:
+    app: jetstream
+spec:
+  selector:
+    app: jetstream
+  ports:
+  - name: tcp-cluster
+    port: 6222
+    protocol: TCP
+  clusterIP: None
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jetstream-cm
+  labels:
+    app: jetstream
+data:
+  nats.conf: |
+    server_name: $SERVER_NAME
+    listen: 4222
+    http: 8222
+    
+    jetstream {
+      store_dir=/nats/storage
+      max_mem: 4G
+      max_file: 4G
+    }
+    
+    cluster {
+      name: jetstream-cluster
+      listen: 6222
+      routes: [
+        nats-route://jetstream-0.jetstream-hlsvc.default.svc.cluster.local:6222
+        nats-route://jetstream-1.jetstream-hlsvc.default.svc.cluster.local:6222
+        nats-route://jetstream-2.jetstream-hlsvc.default.svc.cluster.local:6222
+      ]
+      connect_retries: 30
+    }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jetstream
+  namespace: default
+  labels:
+    app: jetstream
+spec:
+  selector:
+    matchLabels:
+      app: jetstream
+  replicas: 3
+  serviceName: jetstream-hlsvc
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: jetstream
+      annotations:
+        proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: "app"
+                operator: In
+                values:
+                - jetstream
+            topologyKey: "kubernetes.io/hostname"
+      volumes:
+      - name: jetstream-volume
+        configMap:
+          name: jetstream-cm
+      - name: pid
+        emptyDir: {}
+      shareProcessNamespace: true
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: jetstream
+        image: nats:alpine3.15
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: tcp-client
+          containerPort: 4222
+        - name: tcp-leafnodes
+          containerPort: 7422
+        - name: tcp-cluster
+          containerPort: 6222
+        - name: http-monitor
+          containerPort: 8222
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_NAME
+          value: $(POD_NAME)-server
+        volumeMounts:
+        - name: jetstream-volume
+          mountPath: /etc/nats-config
+        - name: pid
+          mountPath: /var/run/nats
+        command:
+        - "nats-server"
+        - "--jetstream"
+        - "--config"
+        - "/etc/nats-config/nats.conf"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8222
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - "/bin/sh"
+              - "-c"
+              - "/nats-server -sl=ldm=/var/run/nats/nats.pid && /bin/sleep 10"

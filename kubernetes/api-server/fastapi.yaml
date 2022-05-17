@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-server-svc
+  labels:
+    app: api-server
+spec:
+  selector:
+    app: api-server
+  ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-server-cm
+  labels:
+    app: api-server
+data:
+  requirements.txt: |
+    fastapi==0.75.0
+    pydantic==1.9.0
+    uvicorn==0.17.6
+    nats-py==2.1.0
+  __init__.py: |
+  schema.py: |
+      from typing import Optional
+      from pydantic import BaseModel
+      
+      
+      class PlaceInfoModel(BaseModel):
+          placeName: str
+          placeType: str
+          placeAddress: str
+          latitude: Optional[float]
+          longitude: Optional[float]
+          telephone: Optional[str]
+          description: Optional[str]
+          menu: Optional[dict]
+          themeKeywords: Optional[list]
+          agePopularity: Optional[dict]
+          genderPopularity: Optional[dict]
+          time: Optional[dict]
+          placeMeanRating: Optional[float]
+          visitReviewNum: Optional[int]
+          blogReviewNum: Optional[int]
+          like: Optional[dict]
+      
+      
+      class ReviewInfoModel(BaseModel):
+          userHash: str
+          reviewUserID: str
+          placeName: str
+          placeAddress: str
+          reviewContent: Optional[str]
+          reviewInfoScore: Optional[str]
+          reviewInfoVisitDay: Optional[str]
+          reviewInfoVisitCount: Optional[int]
+      
+      
+      class UserInfoModel(BaseModel):
+          userHash: str
+          userID: str
+          reviewNum: int
+          photo: int
+          following: int
+          follower: int
+  publisher.py: |
+      import nats
+      from nats.errors import TimeoutError
+      
+      
+      class Publisher:
+          def __init__(self, host):
+              self.host = host
+              self.client = None
+              self.jetstream = None
+      
+          async def connect(self) -> object:
+              try:
+                  self.client = await nats.connect(self.host)
+                  self.jetstream = self.client.jetstream()
+              except TimeoutError:
+                  return False
+      
+          async def publish(
+                  self,
+                  subject: str,
+                  payload: bytes,
+                  timeout: float,
+                  stream: str,
+                  headers: dict,
+          ) -> object:
+              # check jetstream connection
+              if self.jetstream is None:
+                  streamInfo = await self.connect()
+                  if streamInfo is False:
+                      return False
+      
+              # publish the message
+              try:
+                  return await self.jetstream.publish(subject, payload, timeout, stream, headers)
+              except TimeoutError:
+                  return False
+  main.py: |
+      """
+      The API server handle payload agnostic writes to the Nats Jetstream Server
+      subscription must match the ORM class name.
+      """
+      
+      from fastapi import FastAPI
+      import pickle
+      from publisher import Publisher
+      import schema
+      
+      HOST = '{address}:{port}'
+      app = FastAPI()
+      pub = Publisher(HOST.format(address='10.106.59.62', port='4222'))
+      
+      
+      async def publish(data, subject, timeout, stream, headers=None) -> object:
+          payload = pickle.dumps(data.dict())
+          ack = await pub.publish(subject, payload, timeout, stream, headers)
+          return ack
+      
+      
+      @app.post('/PlaceInfoModel')
+      async def receivePlaceInfo(data: schema.PlaceInfoModel) -> object:
+          return await publish(data, 'placeInfo', 2.0, 'data')
+      
+      
+      @app.post('/ReviewInfoModel')
+      async def receiveReviewInfo(data: schema.ReviewInfoModel) -> object:
+          return await publish(data, 'reviewInfo', 2.0, 'data')
+      
+      
+      @app.post('/UserInfoModel')
+      async def receiveUserInfo(data: schema.UserInfoModel) -> object:
+          return await publish(data, 'userInfo', 2.0, 'data')
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+  labels:
+    app: api-server
+spec:
+  selector:
+    matchLabels:
+      app: api-server
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: api-server
+    spec:
+      volumes:
+      - name: api-server-volume
+        configMap:
+          name: api-server-cm
+      containers:
+      - name: api-server
+        image: python:3.8
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: tcp-client
+          containerPort: 4222
+        volumeMounts:
+        - name: api-server-volume
+          mountPath: /app
+        command:
+        - "/bin/bash"
+        - "-c"
+        - "pip install -r /app/requirements.txt;
+          uvicorn main:app --app-dir /app --proxy-headers --host 0.0.0.0 --port 8000"
+      terminationGracePeriodSeconds: 30

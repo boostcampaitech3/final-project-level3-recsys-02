@@ -1,0 +1,32 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: test-gw
+spec:
+  selector:
+    app: istio-ingressgateway
+  servers:
+  - port:
+      number: 8000
+      name: http
+      protocol: TCP
+    hosts:
+    - "*"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: test-vs
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - test-gw
+  tcp:
+  - match:
+    - port: 8000
+    route:
+    - destination:
+        host: api-server-svc.default.svc.cluster.local
+        port:
+          number: 8000
