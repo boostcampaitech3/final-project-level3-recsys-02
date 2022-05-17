@@ -15,15 +15,7 @@ class Broker:
         self.jetstream = None
         self.subscriber = None
 
-    async def connect(self):
-        try:
-            self.client = await nats.connect(self.host)
-            self.jetstream = self.client.jetstream()
-            return True, 'connected to the Nats server'
-        except TimeoutError:
-            return False, 'timed out on a connection'
-
-    async def subscribe(
+    async def connect(
             self,
             durable: str,
             stream: str,
