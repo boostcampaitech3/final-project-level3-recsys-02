@@ -1,5 +1,6 @@
 import nats
 from nats.errors import TimeoutError
+from nats.js.errors import NotFoundError
 import pickle
 
 
@@ -15,12 +16,7 @@ class Broker:
         self.jetstream = None
         self.subscriber = None
 
-    async def connect(
-            self,
-            durable: str,
-            stream: str,
-            subject: str,
-    ) -> tuple:
+    async def connect(self, durable: str, stream: str, subject: str) -> tuple:
         """
         Nats Jetstream 파이썬 API 가 현재 비동기 클라이언트만 지원하므로 비동기 호출해야 합니다.
 
@@ -33,10 +29,11 @@ class Broker:
         try:
             self.client = await nats.connect(self.host)
             self.jetstream = self.client.jetstream()
+            await self.jetstream.add_stream(name=stream, subjects=[subject])
             self.subscriber = await self.jetstream.pull_subscribe(subject, durable, stream)
             return True, await self.subscriber.consumer_info()
         except TimeoutError:
-            return False, 'timed out on a subscription'
+            return False, 'timed out on a connection'
 
     async def publish(
             self,
@@ -64,11 +61,7 @@ class Broker:
         except TimeoutError:
             return False, 'timed out on publishing a message'
 
-    async def pull(
-            self,
-            batchSize: int,
-            timeout: float = 60.0
-    ) -> list:
+    async def pull(self, batchSize: int, timeout: float = 60.0) -> list:
         """
         캐싱된 Payload 를 배치 사이즈만큼 가져옵니다.
 
