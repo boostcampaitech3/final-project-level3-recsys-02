@@ -1,5 +1,6 @@
 import nats
 from nats.errors import TimeoutError
+from nats.js.errors import BadRequestError
 import pickle
 
 
@@ -51,7 +52,9 @@ class Broker:
             response = await self.jetstream.add_stream(name=stream, subjects=subjects)
             self.logger.formatter(response)
         except TimeoutError:
-            raise Exception(self.logger.formatter('Timed out on connecting to the server'))
+            raise Exception(self.logger.formatter('Timed out on connecting to the server.'))
+        except BadRequestError:
+            raise Exception(self.logger.formatter('Stream name already exists.'))
 
     async def subscribe(self, durable: str, stream: str, subject: str):
         """
