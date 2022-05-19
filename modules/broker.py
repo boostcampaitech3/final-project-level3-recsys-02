@@ -1,39 +1,72 @@
 import nats
 from nats.errors import TimeoutError
-from nats.js.errors import NotFoundError
 import pickle
 
 
 class Broker:
-    def __init__(self, host: str):
+    def __init__(self, host: str, logger):
         """
         Nats client 클래스입니다.
+        createStream() 과 subscribe() 에서 인자로 전달되는 stream 은 논리적으로 분리된 공간이고
+        subject 가 메시지 큐라고 생각하시면 됩니다.
 
         :param host: a kubernetes service IP:port string
         """
+        self.logger = logger
         self.host = host
         self.client = None
         self.jetstream = None
         self.subscriber = None
 
-    async def connect(self, durable: str, stream: str, subject: str) -> tuple:
+    async def connect(self):
         """
-        Nats Jetstream 파이썬 API 가 현재 비동기 클라이언트만 지원하므로 비동기 호출해야 합니다.
+        Jetstream 파이썬 API 가 비동기 클라이언트만 지원하므로 비동기 접속
+        __init__() 에서 호출 불가능합니다.
+        FastAPI 가 uvloop 을 레버리징하므로 파이썬 asyncio event loop 에서 호출하지 마시고
+        아래 예시와 같이 호출해주세요.
+        
+        # 예시
+        @app.on_event('startup')
+        async def init():
+            await broker.connect()
 
-        :param durable: a consumer identifier with which the Nats server identifies the queue
-        :param stream: a stream name to which the subject belongs
-        :param subject: a subject to subscribe to
-        :return: a tuple of object ( True if the connection succeeded | False if the connection timed out &&
-        message )
+        :return:
         """
         try:
             self.client = await nats.connect(self.host)
             self.jetstream = self.client.jetstream()
-            await self.jetstream.add_stream(name=stream, subjects=[subject])
-            self.subscriber = await self.jetstream.pull_subscribe(subject, durable, stream)
-            return True, await self.subscriber.consumer_info()
+            self.logger.formatter('Successfully connected to the Nats server.')
         except TimeoutError:
-            return False, 'timed out on a connection'
+            raise Exception(self.logger.formatter('Timed out on connecting to the Nats server.'))
+
+    async def createStream(self, stream: str, subjects: list):
+        """
+        스트림 이름과 subjects 들을 생성합니다.
+
+        :param stream: a stream name to which subject belongs
+        :param subjects: a list of subjects on which messages persist
+        :return:
+        """
+        try:
+            response = await self.jetstream.add_stream(name=stream, subjects=subjects)
+            self.logger.formatter(response)
+        except TimeoutError:
+            raise Exception(self.logger.formatter('Timed out on connecting to the server'))
+
+    async def subscribe(self, durable: str, stream: str, subject: str):
+        """
+        subscribe() 이후 pull() 가능합니다.
+
+        :param durable: a consumer identifier with which the Nats server identifies the queue
+        :param stream: a stream name to which the subject belongs
+        :param subject: a subject to subscribe to
+        :return:
+        """
+        try:
+            self.subscriber = await self.jetstream.pull_subscribe(subject, durable, stream)
+            self.logger.formatter(await self.subscriber.consumer_info())
+        except TimeoutError:
+            raise Exception(self.logger.formatter('Timed out on a subscription.'))
 
     async def publish(
             self,
@@ -42,24 +75,24 @@ class Broker:
             timeout: float,
             stream: str,
             headers: dict,
-    ) -> tuple:
+    ) -> bool:
         """
-        메시지브로커에 데이터를 publish 하는 함수; Payload agnostic
-        데이터 타입 상관 없이 파이썬 객체면 됩니다.
+        브로커에 데이터를 publish 하는 함수
+        Payload agnostic => 데이터 타입 상관 없이 파이썬 오브젝트를 캐싱합니다.
 
         :param subject: a subject to publish to
         :param payload: data bytes
         :param timeout: timeout
         :param stream: a stream name to which the subject belongs
         :param headers: a json header for additional information
-        :return: a tuple of object ( True if the publishing succeeded | False if the publishing timed out &&
-        message )
+        :return: True if the publishing succeeded | False if timed out on publishing
         """
         try:
             payload = pickle.dumps(data)
-            return True, await self.jetstream.publish(subject, payload, timeout, stream, headers)
+            ack = await self.jetstream.publish(subject, payload, timeout, stream, headers)
+            return True
         except TimeoutError:
-            return False, 'timed out on publishing a message'
+            return False
 
     async def pull(self, batchSize: int, timeout: float = 60.0) -> list:
         """
@@ -77,4 +110,7 @@ class Broker:
                 message.ack()
             return batch
         except TimeoutError:
-            pass
+            message = 'The broker client has not received any message in the last {timeout} seconds.'.format(
+                timeout=timeout
+            )
+            self.logger.formatter(message)
