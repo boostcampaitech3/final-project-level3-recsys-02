@@ -1,40 +1,32 @@
 import asyncio
 from fastapi import FastAPI
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import Request, Response
 from modules.broker import Broker
 from modules.events import Events
-from modules import orm
+from modules.orm import UserRequest
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
-
-class ConnectionManager:
-    """
-    웹소켓 connection manager event-driven callbacks 구현체 입니다. 공식 튜토리얼 참고했습니다.
-    출처 : 'https://fastapi.tiangolo.com/advanced/websockets/'
-    """
-    def __init__(self, logger):
-        # hard limit set on the uvicorn server
-        self.logger = logger
-        self.active = []
-
-    async def onConnection(self, websocket: WebSocket):
-        self.logger.formatter(websocket)
-        self.logger.formatter(await websocket.accept())
-
-    def onDisconnection(self, websocket: WebSocket):
-        self.logger.formatter('{client} disconnected.'.format(client=websocket))
-        self.active.remove(websocket)
 
 """
 Push server 가 없으므로 웹소켓으로 비슷하게 구현합니다.
-connection hard limit 은 처리량을 보고 결정할게요. 
+connection hard limit 은 추후 처리량에 따라 결정할 것 같습니다.
+slowapi => Throttling (rate limit 설정) 결국 요청 수 제한도 in-memory storage 에 요청을 캐싱해야 구현 가능
+
+rate limits string format
+[count] [per|/] [n (optional)] [second|minute|hour|day|month|year]
+출처 : "https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation"
 """
 
 # global
 HOST = '192.168.1.101:30042'  # Kubernetes Service IP for the broker
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 logger = Events()
 broker = Broker(HOST, logger)
-manager = ConnectionManager(logger)
 
 
 @app.on_event('startup')
@@ -43,21 +35,28 @@ async def init():
     await broker.createStream('inference', ['pub', 'sub'])
 
 
-@app.websocket('/')
-async def createChannel(websocket: WebSocket):
-    """
-    batch pulling 이 timeout 을 구현하므로 connection hard limit 이 있다면 클라이언트 관리가 가능합니다.
-    subject 갯수에 hard limit 이 없지만 connection limit 보다 적게 설계됩니다.
-    접속이 끊긴 클라이언트는 ConnectionManager class 에서 관리됩니다.
+@app.post('/inference/pub')
+@limiter.limit('3/second')
+async def requestInference(request: Request, response: Response, data: UserRequest):
+    return data
 
-    :param websocket: WebSocket class
-    :return:
-    """
-    await manager.onConnection(websocket)
-    try:
-        """
-        Needs to be filled here !!!
-        """
-        pass
-    except WebSocketDisconnect:
-        manager.onDisconnection(websocket)
+
+@app.get('/inference/get')
+@limiter.limit('3/second')
+async def requestResult(request: Request):
+    '''
+    for key, value in request.headers.items():
+        print('{key} | {keyType} : {value} | {valueType}'.format(
+            key=key,
+            keyType=type(key),
+            value=value,
+            valueType=type(value),
+            )
+        )
+    '''
+    payload = {
+        'id': 'abcd',
+        'lon': 35.0,
+        'lat': 38,
+    }
+    return payload
