@@ -1,7 +1,7 @@
 from datetime import datetime
 
 
-class Events:
+class ServerLog:
     @staticmethod
     def formatter(message):
         """
