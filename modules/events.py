@@ -9,4 +9,6 @@ class Events:
         :param message: log string
         :return:
         """
-        print(datetime.now().strftime('[%Y/%D, %H:%M:%S] : {log}').format(log=message))
+        formatted = datetime.now().strftime('[%Y/%D, %H:%M:%S] : {log}').format(log=message)
+        print(formatted)
+        return formatted
