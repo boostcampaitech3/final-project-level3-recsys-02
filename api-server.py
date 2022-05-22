@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi import Request
+from functools import partial
+import hashlib
 from modules.broker import Broker
 from modules.events import Generator, ServerLog
 
@@ -32,24 +34,20 @@ logger = ServerLog()
 broker = Broker(HOST, logger)
 
 
-async def sayHello():
-    return 'hello, world!'
-
-
-@app.get('/')
-@limiter.limit('3/second')
-async def root(request: Request):
-    return EventSourceResponse(Generator.timeBound(5.0, 1.0, sayHello))
-
-
 @app.on_event('startup')
 async def init():
     await broker.connect()
-    await broker.createStream('inference', ['pub', 'sub'])
+    await broker.createStream('inference', ['input'])
+    await broker.createBucket('inference')
 
 
-@app.post('/inference/place_v1')
+@app.post('/inference')
 @limiter.limit('3/second')
 async def requestInference(request: Request):
-    # return EventSourceResponse()
-    return {}
+    client = str(dict(request)['client']).encode()
+    payload = await request.body()
+    key = hashlib.sha256(client + payload).hexdigest()
+    response = await broker.publish('input', payload, 5.0, 'inference', {'key': key})
+    if response:
+        retrieve = partial(broker.retrieve, key)
+        Generator.timeBound(5.0, 0.5, retrieve)
