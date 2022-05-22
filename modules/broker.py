@@ -18,6 +18,7 @@ class Broker:
         self.client = None
         self.jetstream = None
         self.subscriber = None
+        self.bucket = None
 
     async def connect(self):
         """
@@ -71,17 +72,23 @@ class Broker:
         except TimeoutError:
             raise Exception(self.logger.formatter('Timed out on a subscription.'))
 
+    async def retrieve(self, key):
+        value = self.bucket.get(key=key)
+        print(value)
+        if value != 'unf':
+            return value
+
     async def publish(
             self,
             subject: str,
-            data,
+            payload: bytes,
             timeout: float,
             stream: str,
             headers: dict,
     ) -> bool:
         """
-        브로커에 데이터를 publish 하는 함수
-        Payload agnostic => 데이터 타입 상관 없이 파이썬 오브젝트를 캐싱합니다.
+        client hashing 을 통해 나온 key 값을 key-value 스토어에 생성하고 Nats server 에 데이터를 publish 합니다.
+        Payload agnostic => 데이터 타입에 상관 없이 publish
 
         :param subject: a subject to publish to
         :param payload: data bytes
@@ -91,8 +98,8 @@ class Broker:
         :return: True if the publishing succeeded | False if timed out on publishing
         """
         try:
-            payload = pickle.dumps(data)
-            ack = await self.jetstream.publish(subject, payload, timeout, stream, headers)
+            await self.bucket.put(key=headers['key'], value=b'unf')
+            await self.jetstream.publish(subject, payload, timeout, stream, headers)
             return True
         except TimeoutError:
             return False
@@ -117,3 +124,9 @@ class Broker:
                 timeout=timeout
             )
             self.logger.formatter(message)
+
+    async def createBucket(self, name: str):
+        try:
+            self.bucket = await self.jetstream.create_key_value(bucket=name)
+        except TimeoutError:
+            raise Exception(self.logger.formatter('Timed out on creating a bucket.'))
