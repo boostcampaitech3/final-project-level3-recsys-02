@@ -7,7 +7,7 @@ from modules.events import ServerLog
 async def main(
         host: str,
         batchSize: int
-) -> tuple:
+):
     """
     배치 inferencing implementation
 
@@ -15,6 +15,7 @@ async def main(
     :param batchSize: the number of user requests to be inferred
     :return:
     """
+
     logger = ServerLog()
     broker = Broker(host, logger)
     await broker.connect()
