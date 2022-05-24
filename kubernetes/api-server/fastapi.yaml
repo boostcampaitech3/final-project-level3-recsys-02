@@ -23,67 +23,99 @@ data:
     fastapi==0.75.0
     pydantic==1.9.0
     uvicorn==0.17.6
-    nats-py==2.1.0
+    nats-py==2.1.2
+    slowapi==0.1.5
+    sse-starlette==0.10.3
   __init__.py: |
-  schema.py: |
-      from typing import Optional
-      from pydantic import BaseModel
-      
-      
-      class PlaceInfoModel(BaseModel):
-          placeName: str
-          placeType: str
-          placeAddress: str
-          latitude: Optional[float]
-          longitude: Optional[float]
-          telephone: Optional[str]
-          description: Optional[str]
-          menu: Optional[dict]
-          themeKeywords: Optional[list]
-          agePopularity: Optional[dict]
-          genderPopularity: Optional[dict]
-          time: Optional[dict]
-          placeMeanRating: Optional[float]
-          visitReviewNum: Optional[int]
-          blogReviewNum: Optional[int]
-          like: Optional[dict]
-      
-      
-      class ReviewInfoModel(BaseModel):
-          userHash: str
-          reviewUserID: str
-          placeName: str
-          placeAddress: str
-          reviewContent: Optional[str]
-          reviewInfoScore: Optional[str]
-          reviewInfoVisitDay: Optional[str]
-          reviewInfoVisitCount: Optional[int]
-      
-      
-      class UserInfoModel(BaseModel):
-          userHash: str
-          userID: str
-          reviewNum: int
-          photo: int
-          following: int
-          follower: int
-  publisher.py: |
+  broker.py: |
+      import json
       import nats
       from nats.errors import TimeoutError
+      from nats.js.errors import BadRequestError
+      from nats.js.errors import NotFoundError
+      from nats.js.errors import KeyDeletedError
       
       
-      class Publisher:
-          def __init__(self, host):
+      class Broker:
+          def __init__(self, host: str, logger):
+              """
+              Nats client 클래스입니다.
+              createStream() 과 subscribe() 에서 인자로 전달되는 stream 은 논리적으로 분리된 공간이고
+              subject 가 메시지 큐라고 생각하시면 됩니다.
+      
+              :param host: a kubernetes service IP:port string
+              """
+              self.logger = logger
               self.host = host
-              self.client = None
-              self.jetstream = None
+              self.__client = None
+              self.__jetstream = None
+              self.__subscriber = None
+              self.__bucket = None
       
-          async def connect(self) -> object:
+          async def connect(self):
+              """
+              Jetstream 파이썬 API 가 비동기 클라이언트만 지원하므로 비동기 접속
+              __init__() 에서 호출 불가능합니다.
+              FastAPI 가 uvloop 을 레버리징하므로 파이썬 asyncio event loop 에서 호출하지 마시고
+              아래 예시와 같이 호출해주세요.
+      
+              # 예시
+              @app.on_event('startup')
+              async def init():
+                  await broker.connect()
+      
+              :return:
+              """
               try:
-                  self.client = await nats.connect(self.host)
-                  self.jetstream = self.client.jetstream()
+                  self.__client = await nats.connect(self.host)
+                  self.__jetstream = self.__client.jetstream()
+                  self.logger.formatter('Successfully connected to the Nats server.')
               except TimeoutError:
-                  return False
+                  raise Exception(self.logger.formatter('Timed out on connecting to the Nats server.'))
+      
+          async def createStream(self, stream: str, subjects: list):
+              """
+              stream 이름과 subjects 들을 생성합니다.
+      
+              :param stream: a stream name to which subject belongs
+              :param subjects: a list of subjects on which messages persist
+              :return:
+              """
+              try:
+                  response = await self.__jetstream.add_stream(name=stream, subjects=subjects)
+                  self.logger.formatter(response)
+              except TimeoutError:
+                  raise Exception(self.logger.formatter('Timed out on creating a stream'))
+              except BadRequestError:
+                  raise Exception(self.logger.formatter('Stream name already exists.'))
+      
+          async def removeStream(self, stream: str):
+              """
+              stream 을 삭제합니다.
+      
+              :param stream:
+              :return:
+              """
+              try:
+                  response = await self.__jetstream.delete_stream(stream)
+                  self.logger.formatter(response)
+              except TimeoutError:
+                  raise Exception(self.logger.formattter('Timed out on removing a stream'))
+      
+          async def subscribe(self, durable: str, stream: str, subject: str):
+              """
+              subscribe() 이후 pull() 가능합니다.
+      
+              :param durable: a consumer identifier with which the Nats server identifies the queue
+              :param stream: a stream name to which the subject belongs
+              :param subject: a subject to subscribe to
+              :return:
+              """
+              try:
+                  self.__subscriber = await self.__jetstream.pull_subscribe(subject, durable, stream)
+                  self.logger.formatter(await self.__subscriber.consumer_info())
+              except TimeoutError:
+                  raise Exception(self.logger.formatter('Timed out on a subscription.'))
       
           async def publish(
                   self,
@@ -92,53 +124,230 @@ data:
                   timeout: float,
                   stream: str,
                   headers: dict,
-          ) -> object:
-              # check jetstream connection
-              if self.jetstream is None:
-                  streamInfo = await self.connect()
-                  if streamInfo is False:
-                      return False
+          ) -> bool:
+              """
+              client hashing 을 통해 나온 key 값을 key-value 스토어에 생성하고 Nats server 에 데이터를 publish 합니다.
+              Payload agnostic => 데이터 타입에 상관 없이 publish
       
-              # publish the message
+              :param subject: a subject to publish to
+              :param payload: data bytes
+              :param timeout: timeout
+              :param stream: a stream name to which the subject belongs
+              :param headers: a json header for additional information
+              :return: True if the publishing succeeded | False if timed out on publishing
+              """
               try:
-                  return await self.jetstream.publish(subject, payload, timeout, stream, headers)
+                  await self.__jetstream.publish(subject, payload, timeout, stream, headers)
+                  return True
               except TimeoutError:
                   return False
+      
+          async def pull(self, batchSize: int, timeout: float = 5.0) -> list:
+              """
+              캐싱된 Payload 를 배치 사이즈만큼 가져옵니다.
+      
+              :param batchSize: determines the size of a list to pull
+              :param timeout: timeout
+              :return: a list of user request to be inferred
+              """
+              try:
+                  pulled = await self.__subscriber.fetch(batchSize, timeout)
+                  batch = []
+                  for message in pulled:
+                      data = json.loads(message.data)
+                      batch.append((message.headers, data))
+                      await message.ack()
+                  return batch
+              except TimeoutError:
+                  pass
+      
+          async def createBucket(self, name: str):
+              """
+              Bucket 생성합니다.
+      
+              :param name: a bucket name to be created
+              :return:
+              """
+              try:
+                  self.__bucket = await self.__jetstream.create_key_value(bucket=name)
+              except TimeoutError:
+                  raise Exception(self.logger.formatter('Timed out on creating a bucket.'))
+      
+          async def fetchResult(self, key: str) -> object:
+              """
+              key 에서 값 가져오기
+      
+              :param key:
+              :return:
+              """
+              try:
+                  result = await self.__bucket.get(key=key)
+                  return result.value
+              except NotFoundError:
+                  return None
+              except KeyDeletedError:
+                  return None
+      
+          async def createKey(self, key: str, value: bytes):
+              """
+              Bucket 에 key 생성하고 value 추가
+              :param key:
+              :param value: bytes
+              :return: 
+              """
+              try:
+                  return await self.__bucket.put(key=key, value=value)
+              except:
+                  self.logger.formatter('Timed out on creating and assigning a key-value item.')
+                  return None
+      
+          async def removeKey(self, key: str):
+              """
+              Bucket 에서 key 삭제
+              :param key:
+              :return:
+              """
+              try:
+                  await self.__bucket.delete(key)
+              except:
+                  self.logger.formatter('Timed out on removing a key-value item.')
+  events.py: |
+      import asyncio
+      from datetime import datetime
+      import time
+      from typing import Callable
+      
+      
+      class ServerLog:
+          @staticmethod
+          def formatter(message: str):
+              """
+              Pod console 에 메시지 표시할 때 포맷해주는 wrapper function
+              :param message: log string
+              :return:
+              """
+              formatted = datetime.now().strftime('[%Y/%D, %H:%M:%S] : {log}').format(log=message)
+              print(formatted)
+              return formatted
   main.py: |
-      """
-      The API server handle payload agnostic writes to the Nats Jetstream Server
-      subscription must match the ORM class name.
-      """
-      
+      import asyncio
       from fastapi import FastAPI
-      import pickle
-      from publisher import Publisher
-      import schema
+      from fastapi import Request
+      import hashlib
+      from broker import Broker
+      from events import ServerLog
+      import time
       
-      HOST = '{address}:{port}'
+      # Rate Limiting for QOS
+      from slowapi import Limiter, _rate_limit_exceeded_handler
+      from slowapi.util import get_remote_address
+      from slowapi.errors import RateLimitExceeded
+      
+      # Server Sent Events Implementation
+      from sse_starlette.sse import EventSourceResponse
+      
+      """
+      sse => Server Side Event
+      Generator.timeBound | Generator.iterBound 
+      Both are static wrapper functions
+      
+      slowapi => Throttling (rate limit 설정) 요청 수 제한을 위해 in-memory storage 에 요청을 캐싱하는 구현체
+      rate limits string format
+      [count] [per|/] [n (optional)] [second|minute|hour|day|month|year]
+      출처 : "https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation"
+      """
+      
+      # global
+      HOST = '192.168.1.101:30042'  # Kubernetes Service IP for the broker
+      limiter = Limiter(key_func=get_remote_address)
       app = FastAPI()
-      pub = Publisher(HOST.format(address='10.106.59.62', port='4222'))
+      app.state.limiter = limiter
+      app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+      logger = ServerLog()
+      broker = Broker(HOST, logger)
+      
+      # subjects for debugging only
+      testSubjects = [
+          'byp-input',
+          'djp-input',
+          'jyy-input',
+          'mjk-input',
+          'dhl-input',
+      ]
       
       
-      async def publish(data, subject, timeout, stream, headers=None) -> object:
-          payload = pickle.dumps(data.dict())
-          ack = await pub.publish(subject, payload, timeout, stream, headers)
-          return ack
+      @app.on_event('startup')
+      async def init():
+          await broker.connect()
+          await broker.removeStream('inference')
+          await broker.createStream('inference', testSubjects)
+          await broker.createBucket('inference')
       
       
-      @app.post('/PlaceInfoModel')
-      async def receivePlaceInfo(data: schema.PlaceInfoModel) -> object:
-          return await publish(data, 'placeInfo', 2.0, 'data')
+      async def clientBasedHashing(request: Request):
+          if request is not None:
+              client = str(dict(request)['client']).encode()
+              payload = await request.body()
+              key = hashlib.sha256(client + payload).hexdigest()
+              return payload, key
       
       
-      @app.post('/ReviewInfoModel')
-      async def receiveReviewInfo(data: schema.ReviewInfoModel) -> object:
-          return await publish(data, 'reviewInfo', 2.0, 'data')
+      async def debug(request: Request, stream, subject, key: str):
+          payload = await request.body()
+          response = await broker.publish(subject, payload, 5.0, stream, {'key': key})
+          if response:
+              timeout = 2.0
+              timeElapsed = 0.0
+              timeStarted = time.perf_counter()
+              interval = 0.5
+              while timeElapsed <= timeout:
+                  result = await broker.fetchResult(key)
+      
+                  # fetch succeeded
+                  if result is not None:
+                      await broker.removeKey(key)
+                      return {'response': result}
+      
+                  timeElapsed += (time.perf_counter() - timeStarted)
+                  await asyncio.sleep(interval)
+              return {'response': 'Unable to fetch the result'}
+          else:
+              return {'response': 'Failed to publish due to the server timeout'}
       
       
-      @app.post('/UserInfoModel')
-      async def receiveUserInfo(data: schema.UserInfoModel) -> object:
-          return await publish(data, 'userInfo', 2.0, 'data')
+      @app.post('/inference/byp')
+      @limiter.limit('5/second')
+      async def inference0(request: Request):
+          output = await debug(request, 'inference', 'byp-input', 'byp-output')
+          return output
+      
+      
+      @app.post('/inference/djp')
+      @limiter.limit('5/second')
+      async def inference1(request: Request):
+          output = await debug(request, 'inference', 'djp-input', 'djp-output')
+          return output
+      
+      
+      @app.post('/inference/jyy')
+      @limiter.limit('5/second')
+      async def inference2(request: Request):
+          output = await debug(request, 'inference', 'jyy-input', 'jyy-output')
+          return output
+      
+      
+      @app.post('/inference/mjk')
+      @limiter.limit('5/second')
+      async def inference3(request: Request):
+          output = await debug(request, 'inference', 'mjk-input', 'mjk-output')
+          return output
+      
+      
+      @app.post('/inference/dhl')
+      @limiter.limit('5/second')
+      async def inference4(request: Request):
+          output = await debug(request, 'inference', 'dhl-input', 'dhl-output')
+          return output
 ---
 apiVersion: apps/v1
 kind: Deployment
