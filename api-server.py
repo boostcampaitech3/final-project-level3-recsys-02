@@ -1,9 +1,11 @@
+import asyncio
 from fastapi import FastAPI
 from fastapi import Request
-from functools import partial
 import hashlib
 from modules.broker import Broker
 from modules.events import Generator, ServerLog
+import time
+import pickle
 
 # Rate Limiting for QOS
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -33,21 +35,85 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 logger = ServerLog()
 broker = Broker(HOST, logger)
 
+# subjects for debugging only
+testSubjects = [
+    'byp-input',
+    'djp-input',
+    'jyy-input',
+    'mjk-input',
+    'dhl-input',
+]
+
 
 @app.on_event('startup')
 async def init():
     await broker.connect()
-    await broker.createStream('inference', ['input'])
+    await broker.removeStream('inference')
+    await broker.createStream('inference', testSubjects)
     await broker.createBucket('inference')
 
 
-@app.post('/inference')
-@limiter.limit('3/second')
-async def requestInference(request: Request):
-    client = str(dict(request)['client']).encode()
+async def clientBasedHashing(request: Request):
+    if request is not None:
+        client = str(dict(request)['client']).encode()
+        payload = await request.body()
+        key = hashlib.sha256(client + payload).hexdigest()
+        return payload, key
+
+
+async def debug(request: Request, stream, subject, key: str):
     payload = await request.body()
-    key = hashlib.sha256(client + payload).hexdigest()
-    response = await broker.publish('input', payload, 5.0, 'inference', {'key': key})
+    response = await broker.publish(subject, payload, 5.0, stream, {'key': key})
     if response:
-        retrieve = partial(broker.retrieve, key)
-        Generator.timeBound(5.0, 0.5, retrieve)
+        timeout = 2.0
+        timeElapsed = 0.0
+        timeStarted = time.perf_counter()
+        interval = 0.5
+        while timeElapsed <= timeout:
+            result = await broker.fetchResult(key)
+
+            # fetch succeeded
+            if result is not None:
+                await broker.removeKey(key)
+                return {'response': result}
+
+            timeElapsed += (time.perf_counter() - timeStarted)
+            await asyncio.sleep(interval)
+        return {'response': 'Unable to fetch the result'}
+    else:
+        return {'response': 'Failed to publish due to the server timeout'}
+
+
+@app.post('/inference/byp')
+@limiter.limit('5/second')
+async def inference0(request: Request):
+    output = await debug(request, 'inference', 'byp-input', 'byp-output')
+    return output
+
+
+@app.post('/inference/djp')
+@limiter.limit('5/second')
+async def inference1(request: Request):
+    output = await debug(request, 'inference', 'djp-input', 'djp-output')
+    return output
+
+
+@app.post('/inference/jyy')
+@limiter.limit('5/second')
+async def inference2(request: Request):
+    output = await debug(request, 'inference', 'jyy-input', 'jyy-output')
+    return output
+
+
+@app.post('/inference/mjk')
+@limiter.limit('5/second')
+async def inference3(request: Request):
+    output = await debug(request, 'inference', 'mjk-input', 'mjk-output')
+    return output
+
+
+@app.post('/inference/dhl')
+@limiter.limit('5/second')
+async def inference4(request: Request):
+    output = await debug(request, 'inference', 'dhl-input', 'dhl-output')
+    return output
