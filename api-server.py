@@ -3,9 +3,8 @@ from fastapi import FastAPI
 from fastapi import Request
 import hashlib
 from modules.broker import Broker
-from modules.events import Generator, ServerLog
+from modules.events import ServerLog
 import time
-import pickle
 
 # Rate Limiting for QOS
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -48,7 +47,6 @@ testSubjects = [
 @app.on_event('startup')
 async def init():
     await broker.connect()
-    await broker.removeStream('inference')
     await broker.createStream('inference', testSubjects)
     await broker.createBucket('inference')
 
