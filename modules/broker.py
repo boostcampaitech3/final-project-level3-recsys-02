@@ -1,8 +1,9 @@
+import json
 import nats
 from nats.errors import TimeoutError
 from nats.js.errors import BadRequestError
 from nats.js.errors import NotFoundError
-import pickle
+from nats.js.errors import KeyDeletedError
 
 
 class Broker:
@@ -111,7 +112,7 @@ class Broker:
         except TimeoutError:
             return False
 
-    async def pull(self, batchSize: int, timeout: float = 60.0) -> list:
+    async def pull(self, batchSize: int, timeout: float = 5.0) -> list:
         """
         캐싱된 Payload 를 배치 사이즈만큼 가져옵니다.
 
@@ -123,14 +124,12 @@ class Broker:
             pulled = await self.__subscriber.fetch(batchSize, timeout)
             batch = []
             for message in pulled:
-                batch.append(pickle.loads(message.data))
-                message.ack()
+                data = json.loads(message.data)
+                batch.append((message.headers, data))
+                await message.ack()
             return batch
         except TimeoutError:
-            message = 'The broker client has not received any message in the last {timeout} seconds.'.format(
-                timeout=timeout
-            )
-            self.logger.formatter(message)
+            pass
 
     async def createBucket(self, name: str):
         """
@@ -156,6 +155,8 @@ class Broker:
             return result.value
         except NotFoundError:
             return None
+        except KeyDeletedError:
+            return None
 
     async def createKey(self, key: str, value: bytes):
         """
@@ -164,7 +165,11 @@ class Broker:
         :param value: bytes
         :return: 
         """
-        await self.__bucket.put(key=key, value=value)
+        try:
+            return await self.__bucket.put(key=key, value=value)
+        except:
+            self.logger.formatter('Timed out on creating and assigning a key-value item.')
+            return None
 
     async def removeKey(self, key: str):
         """
@@ -172,4 +177,7 @@ class Broker:
         :param key:
         :return:
         """
-        await self.__bucket.delete(key)
+        try:
+            await self.__bucket.delete(key)
+        except:
+            self.logger.formatter('Timed out on removing a key-value item.')
