@@ -47,7 +47,6 @@ if __name__ == '__main__':
     config.add_argument('--durable', type=str, required=True, help='an inference server identifier')
     config.add_argument('--stream', type=str, required=True, help='a stream name')
     config.add_argument('--subject', type=str, required=True, help='a subject name to subscribe to')
-    config.add_argument('--key', type=str, required=True, help='a key name')
     config.add_argument('--batch', default=100, type=int, help='determine a batch size to be inferred at a time')
     args = config.parse_args()
     asyncio.run(main(args))
