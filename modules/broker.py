@@ -1,6 +1,7 @@
 import nats
 from nats.errors import TimeoutError
 from nats.js.errors import BadRequestError
+from nats.js.errors import NotFoundError
 import pickle
 
 
@@ -15,10 +16,10 @@ class Broker:
         """
         self.logger = logger
         self.host = host
-        self.client = None
-        self.jetstream = None
-        self.subscriber = None
-        self.bucket = None
+        self.__client = None
+        self.__jetstream = None
+        self.__subscriber = None
+        self.__bucket = None
 
     async def connect(self):
         """
@@ -35,27 +36,40 @@ class Broker:
         :return:
         """
         try:
-            self.client = await nats.connect(self.host)
-            self.jetstream = self.client.jetstream()
+            self.__client = await nats.connect(self.host)
+            self.__jetstream = self.__client.jetstream()
             self.logger.formatter('Successfully connected to the Nats server.')
         except TimeoutError:
             raise Exception(self.logger.formatter('Timed out on connecting to the Nats server.'))
 
     async def createStream(self, stream: str, subjects: list):
         """
-        스트림 이름과 subjects 들을 생성합니다.
+        stream 이름과 subjects 들을 생성합니다.
 
         :param stream: a stream name to which subject belongs
         :param subjects: a list of subjects on which messages persist
         :return:
         """
         try:
-            response = await self.jetstream.add_stream(name=stream, subjects=subjects)
+            response = await self.__jetstream.add_stream(name=stream, subjects=subjects)
             self.logger.formatter(response)
         except TimeoutError:
-            raise Exception(self.logger.formatter('Timed out on connecting to the server.'))
+            raise Exception(self.logger.formatter('Timed out on creating a stream'))
         except BadRequestError:
             raise Exception(self.logger.formatter('Stream name already exists.'))
+
+    async def removeStream(self, stream: str):
+        """
+        stream 을 삭제합니다.
+
+        :param stream:
+        :return:
+        """
+        try:
+            response = await self.__jetstream.delete_stream(stream)
+            self.logger.formatter(response)
+        except TimeoutError:
+            raise Exception(self.logger.formattter('Timed out on removing a stream'))
 
     async def subscribe(self, durable: str, stream: str, subject: str):
         """
@@ -67,16 +81,10 @@ class Broker:
         :return:
         """
         try:
-            self.subscriber = await self.jetstream.pull_subscribe(subject, durable, stream)
-            self.logger.formatter(await self.subscriber.consumer_info())
+            self.__subscriber = await self.__jetstream.pull_subscribe(subject, durable, stream)
+            self.logger.formatter(await self.__subscriber.consumer_info())
         except TimeoutError:
             raise Exception(self.logger.formatter('Timed out on a subscription.'))
-
-    async def retrieve(self, key):
-        value = self.bucket.get(key=key)
-        print(value)
-        if value != 'unf':
-            return value
 
     async def publish(
             self,
@@ -98,7 +106,7 @@ class Broker:
         :return: True if the publishing succeeded | False if timed out on publishing
         """
         try:
-            await self.jetstream.publish(subject, payload, timeout, stream, headers)
+            await self.__jetstream.publish(subject, payload, timeout, stream, headers)
             return True
         except TimeoutError:
             return False
@@ -112,7 +120,7 @@ class Broker:
         :return: a list of user request to be inferred
         """
         try:
-            pulled = await self.subscriber.fetch(batchSize, timeout)
+            pulled = await self.__subscriber.fetch(batchSize, timeout)
             batch = []
             for message in pulled:
                 batch.append(pickle.loads(message.data))
@@ -125,7 +133,43 @@ class Broker:
             self.logger.formatter(message)
 
     async def createBucket(self, name: str):
+        """
+        Bucket 생성합니다.
+
+        :param name: a bucket name to be created
+        :return:
+        """
         try:
-            self.bucket = await self.jetstream.create_key_value(bucket=name)
+            self.__bucket = await self.__jetstream.create_key_value(bucket=name)
         except TimeoutError:
             raise Exception(self.logger.formatter('Timed out on creating a bucket.'))
+
+    async def fetchResult(self, key: str) -> object:
+        """
+        key 에서 값 가져오기
+
+        :param key:
+        :return:
+        """
+        try:
+            result = await self.__bucket.get(key=key)
+            return result.value
+        except NotFoundError:
+            return None
+
+    async def createKey(self, key: str, value: bytes):
+        """
+        Bucket 에 key 생성하고 value 추가
+        :param key:
+        :param value: bytes
+        :return: 
+        """
+        await self.__bucket.put(key=key, value=value)
+
+    async def removeKey(self, key: str):
+        """
+        Bucket 에서 key 삭제
+        :param key:
+        :return:
+        """
+        await self.__bucket.delete(key)
