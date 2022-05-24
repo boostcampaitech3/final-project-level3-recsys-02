@@ -1,0 +1,6 @@
+fastapi==0.75.0
+pydantic==1.9.0
+uvicorn==0.17.6
+nats-py==2.1.2
+slowapi==0.1.5
+sse-starlette==0.10.3
