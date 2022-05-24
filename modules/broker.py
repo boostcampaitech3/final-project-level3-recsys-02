@@ -98,7 +98,6 @@ class Broker:
         :return: True if the publishing succeeded | False if timed out on publishing
         """
         try:
-            await self.bucket.put(key=headers['key'], value=b'unf')
             await self.jetstream.publish(subject, payload, timeout, stream, headers)
             return True
         except TimeoutError:
