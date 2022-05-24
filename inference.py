@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 from modules.broker import Broker
-from models.skeleton import RandomRec
+from modules.events import ServerLog
 
 
 async def main(
@@ -15,22 +15,20 @@ async def main(
     :param batchSize: the number of user requests to be inferred
     :return:
     """
-    broker = Broker(host)
-    status, log = await broker.connect('testServer', 'test-stream', 'test-subject')
-    if status is False:
-        return status, log
-    print(log)
+    logger = ServerLog()
+    broker = Broker(host, logger)
+    await broker.connect()
 
-    model = RandomRec()
+    """
+    Model 인스턴스 여기에 생성해주세요.
+    """
+
     while True:
         try:
             batch = await broker.pull(batchSize)
             """
-            feed forward
+            Model inference 여기에 해주세요.
             """
-            results = model.forward(batch)
-            ack = await broker.publish('test-subject', results, 5.0, 'test-stream', {})
-            print(ack)
             await asyncio.sleep(0.5)
         except:
             pass
@@ -41,5 +39,4 @@ if __name__ == '__main__':
     config.add_argument('--host', type=str, required=True, help='host "IP:port" formatted string')
     config.add_argument('--batch-size', default=100, type=int, help='determine a batch size to be inferred at a time')
     args = config.parse_args()
-    status, log = asyncio.run(main(args.host, args.batch_size))
-    print(log)
+    asyncio.run(main(args.host, args.batch_size))
