@@ -56,3 +56,20 @@ class CossimRecommender:
         nearest_list = self.map_loader.filtermap(coor)
         topk = self.get_nearest_cossim(nearest_list, place_id)
         return topk
+    
+
+    def user_recommend(self, coor, user_emb, history_list, k=10):
+        result = []
+        nearest_list = self.map_loader.filtermap(coor)
+        nearest_ids = [self.place2id[n] for n in nearest_list]
+        user_embedding = user_emb.reshape(1,-1)
+        cossim = cosine_similarity(user_embedding, self.place_emb)
+        cossim = cossim.squeeze()
+        cossim[history_list] = -1
+        cossim = cossim[nearest_ids]
+
+        for idx in np.argsort(cossim)[::-1][:k]:
+            result.append(self.id2place[idx])
+        return result
+
+        
