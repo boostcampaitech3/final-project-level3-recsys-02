@@ -5,9 +5,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import pickle
+import numpy as np
 
 from tqdm import tqdm
-from models.reading_data import DataReader, Metapath2vecDataset
+from reading_data import DataReader, Metapath2vecDataset
 
 
 class SkipGramModel(nn.Module):
@@ -44,7 +45,7 @@ class Metapath2VecTrainer:
     def __init__(self, args):
         min_count, care_type = args.min_count, args.care_type
         batch_size, iterations = args.batch_size, args.iterations
-        window_size, dim, initial_lr = args.window_size, args.dim, args.initial_lr
+        window_size, dim, initial_lr = args.window_size, args.embed_dim, args.lr
         
         self.data_dir = args.data_dir
         self.metapath_filename = args.metapath_filename
@@ -92,6 +93,6 @@ class Metapath2VecTrainer:
                     scheduler.step()
         
         embed_path = self.data_dir+self.embed_filename
-        torch.save(self.skip_gram_model.u_embeddings.weight, embed_path)
-        with open(embed_path+'_id2word.pkl', 'w') as f:
+        np.save(embed_path, self.skip_gram_model.u_embeddings.weight.detach().cpu().numpy())
+        with open(embed_path+'_id2word.pkl', 'wb') as f:
             pickle.dump(self.data.id2word, f)
