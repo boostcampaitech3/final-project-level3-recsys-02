@@ -3,6 +3,7 @@ import asyncio
 import json
 from modules.broker import Broker
 from modules.events import ServerLog
+from models.model import CossimRecommender
 import pickle
 
 
@@ -16,7 +17,9 @@ async def main(kwargs):
     """
     Model 인스턴스 여기에 생성해주세요.
     """
-
+    
+    model = CossimRecommender('/opt/ml/final-project-level3-recsys-02/data/')
+    
     while True:
         try:
             batch = await broker.pull(kwargs.batch)
@@ -28,7 +31,10 @@ async def main(kwargs):
 
             if batch:
                 for headers, data in batch:
-                    await broker.createKey(key=headers['key'], value=json.dumps(data).encode())
+                    topk = model.recommend((data['lon'], data['lat']), data['placeID'])
+                    data['topk'] = topk
+                    
+                    await broker.createKey(key=headers['key'], value=json.dumps(data, ensure_ascii=False).encode())
         except:
             import traceback
             print(traceback.format_exc())

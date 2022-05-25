@@ -15,6 +15,8 @@ class MapLoader:
         place['placeID'] = place['placeID'].apply(lambda x : x.replace(" ", ""))
         place['map'] = place[['longitude','latitude']].apply(lambda x: tuple(x.values),axis=1)
         self.place = place[~place.placeType.str.contains('성급')].reset_index().copy()
+
+
         self.R = 6373.0
         self.r = 1
     
@@ -38,14 +40,15 @@ class MapLoader:
 
 
 class CossimRecommender:
-    def __init__(self, data_dir):
-        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir)
+    def __init__(self, data_dir, filename):
+
+        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir,filename)
         self.cossim = cosine_similarity(np.array(self.place_emb))
         self.map_loader = MapLoader(data_dir=data_dir)
         
     
     def get_nearest_cossim(self, nearest_list, place_id, k=5):
-        print(self.id2place[place_id])
+        # print(self.id2place[place_id])
         nearest_ids = [self.place2id[n] for n in nearest_list]
         nearest_cossim = self.cossim[place_id, nearest_ids[:]]
         topk = np.argsort(nearest_cossim)[::-1][1:k+1]
