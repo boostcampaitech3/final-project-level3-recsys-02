@@ -107,6 +107,7 @@ class Broker:
         :return: True if the publishing succeeded | False if timed out on publishing
         """
         try:
+            await self.createKey(key=headers.get('key'), value=b'')
             await self.__jetstream.publish(subject, payload, timeout, stream, headers)
             return True
         except TimeoutError:
