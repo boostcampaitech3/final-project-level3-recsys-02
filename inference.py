@@ -45,7 +45,6 @@ if __name__ == '__main__':
     --host => IP:Port
     --durable => 본인 id (inference server 별로 겹치지 않게)
     --stream => stream 이름
-    --key => key 이름
     --batch => 배치 사이즈 (기본 : 100)
     """
     config = argparse.ArgumentParser(description='How to run an Inference Server')
