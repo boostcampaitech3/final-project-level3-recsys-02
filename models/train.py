@@ -4,24 +4,24 @@ from sys import meta_path
 
 from metapath2vec import Metapath2VecTrainer
 from sampler import construct_graph, create_metapath
-from util import remap_id
+from preprocess import make_data
 
 import pandas as pd
+import pickle
 
 
 def train(args):
-
-    if args.csv_filename:
-        df = pd.read_csv(args.data_dir + args.csv_filename)
-        place_id2idx, place_idx2id = remap_id(df['placeID'].unique())
-        feature_id2idx, feature_idx2id = remap_id(df['feature'].unique())
-
-        df['placeID'] = df['placeID'].apply(lambda x : place_id2idx[x])
-        df['feature'] = df['feature'].apply(lambda x: feature_id2idx[x])
+    if args.make_metapath:
+        with open(args.data_dir + 'food.pickle', 'rb') as f :
+            raw_df = pickle.load(f)
+        raw_df = raw_df[~raw_df.placeType.str.contains('성급')].reset_index().copy()
+        raw_df['placeID'] = raw_df.apply(lambda x : x['placeName'] + x['placeAddress'], axis = 1)
+        raw_df['placeID'] = raw_df['placeID'].apply(lambda x : x.replace(" ", ""))
         
-        graph = construct_graph(df)
+        id2place, df_list = make_data(raw_df)
+        graph = construct_graph(*df_list)
         data_path = os.path.join(args.data_dir, args.metapath_filename)
-        create_metapath(graph, data_path, args.num_walks_per_node, args.walk_length, place_idx2id)
+        create_metapath(graph, data_path, args.num_walks_per_node, args.walk_length, id2place)
 
     m2v = Metapath2VecTrainer(args)
     m2v.train()
@@ -30,7 +30,7 @@ def train(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--csv_filename', type=str, default='', help='random seed (default: 42)')
+    parser.add_argument('--make_metapath', type=bool, default=True, help='random seed (default: 42)')
     parser.add_argument('--data_dir', type=str, default='/opt/ml/final-project-level3-recsys-02/data/', help='random seed (default: 42)')
     parser.add_argument('--metapath_filename', type=str, default='all_metapath.txt', help='random seed (default: 42)')    
     parser.add_argument('--embed_filename', type=str, default='all_metapath_embeddings', help='random seed (default: 42)')
