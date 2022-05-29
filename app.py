@@ -1,26 +1,54 @@
-import numpy as np
-import pandas as pd
-import requests
-import streamlit as st
+import argparse
+import asyncio
+import json
+from modules.broker import Broker
+from modules.events import ServerLog
+import random
 
 
-def draw():
-    userID = 'test-user'
-    longitude = 37.44354
-    latitude = 127.0560482
-    payload = {
-        'userID': userID,
-        'longitude': longitude,
-        'latitude': latitude,
-    }
-    response = requests.post('http://localhost:8000/request', json=payload)
-    data = response.json()
+async def main(kwargs):
+    logger = ServerLog()
+    broker = Broker(kwargs.host, logger)
+    await broker.connect()
+    await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
+    await broker.createBucket('inference')
 
-    if response is not None:
-        df = pd.DataFrame(
-            np.random.randn(data['response'][0], data['response'][1]) / [50, 50] + [longitude, latitude],
-            columns=['lat', 'lon'])
-        st.map(df)
+    while True:
+        try:
+            batch = await broker.pull(kwargs.batch, timeout=1.0)
+
+            """
+            여기 inference logic 넣어주세요.
+            아래 if batch 이하 코드는 echo return 입니다.
+            """
+
+            if batch:
+                for headers, data in batch:
+                    payload = {}
+                    key = headers.get('key')
+                    for index in range(10):
+                        ty = random.uniform(-0.001, 0.001)
+                        lat = data['latitude'] + ty
+                        tx = random.uniform(-0.001, 0.001)
+                        lng = data['longitude'] + tx
+                        place = {
+                            'lat': lat,
+                            'lng': lng,
+                        }
+                        payload[str(index)] = place
+                    data = json.dumps(payload).encode()
+                    await broker.createKey(key=key, value=data)
+        except:
+            import traceback
+            print(traceback.format_exc())
 
 
-st.button('mark', on_click=draw)
+if __name__ == '__main__':
+    config = argparse.ArgumentParser(description='How to run an Inference Server')
+    config.add_argument('--host', type=str, required=True, help='host "IP:port" formatted string')
+    config.add_argument('--durable', type=str, required=True, help='an inference server identifier')
+    config.add_argument('--stream', type=str, required=True, help='a stream name')
+    config.add_argument('--subject', type=str, required=True, help='a subject name to subscribe to')
+    config.add_argument('--batch', default=100, type=int, help='determine a batch size to be inferred at a time')
+    args = config.parse_args()
+    asyncio.run(main(args))
