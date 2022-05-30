@@ -253,7 +253,7 @@ data:
       """
 
       # global
-      HOST = '192.168.1.101:30042'  # Kubernetes Service IP for the broker
+      HOST = '10.107.112.241:4222'  # Kubernetes Service IP for the broker
       limiter = Limiter(key_func=get_remote_address)
       app = FastAPI()
       templates = Jinja2Templates(directory='/app/templates')
