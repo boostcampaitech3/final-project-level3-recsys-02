@@ -25,7 +25,7 @@ data:
     uvicorn==0.17.6
     nats-py==2.1.2
     slowapi==0.1.5
-    sse-starlette==0.10.3
+    Jinja2==3.1.2
   __init__.py: |
 
   broker.py: |
