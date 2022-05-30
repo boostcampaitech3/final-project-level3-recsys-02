@@ -1,8 +1,12 @@
 import argparse
 import asyncio
 import json
+# from tkinter import _PlaceInfo
 from modules.broker import Broker
 from modules.events import ServerLog
+from models.model import CossimRecommender
+from models.model import Recommender
+
 import random
 
 
@@ -13,6 +17,9 @@ async def main(kwargs):
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
     await broker.createBucket('inference')
 
+    model1 = CossimRecommender('/opt/ml/final-project-level3-recsys-02/data/','final_embeddings')
+    model2 = Recommender('/opt/ml/final-project-level3-recsys-02/data/','pu_embeddings_1km')
+    
     while True:
         try:
             batch = await broker.pull(kwargs.batch, timeout=0.5)
@@ -31,20 +38,35 @@ async def main(kwargs):
                     """
                     유저 아이디 가져오는 부분이랑 결과 리턴 사이에서 inference logic 이 실행
                     """
+                    topk = model2.recommend((data['longitude'], data['latitude']), '5b61c7658f8242cb2a1b1028')
 
-                    for index in range(10):
-                        ty = random.uniform(-0.001, 0.001)
-                        lat = data['latitude'] + ty
-                        tx = random.uniform(-0.001, 0.001)
-                        lng = data['longitude'] + tx
-                        place = {
-                            'lat': lat,
-                            'lng': lng,
-                        }
-                        payload[str(index)] = place
+                    # payload['topk'] = topk
+                    # for index in range(10):
+                    #     ty = random.uniform(-0.001, 0.001)
+                    #     lat = data['latitude'] + ty
+                    #     tx = random.uniform(-0.001, 0.001)
+                    #     lng = data['longitude'] + tx
+                    #     place = {
+                    #         'lat': lat,
+                    #         'lng': lng,
+                    #     }
+
+                        # payload[str(index)] = place
+                    # print(topk)
+                    for place in topk:
+                        print(place)
+                        PlaceInfo = {}
+                        PlaceInfo['name'] = place
+                        lon,lat = model2.map_loader.place[model2.map_loader.place['placeID'] == place]['map'].values[0]
+                        PlaceInfo['latitude'] = lat
+                        PlaceInfo['longitude'] = lon
+                        payload[place] = PlaceInfo
 
                     # 결과 리턴
-                    data = json.dumps(payload).encode()
+
+                    # print(payload)
+                    data = json.dumps(payload,ensure_ascii=False).encode()
+                    
                     await broker.createKey(key=key, value=data)
         except:
             import traceback
