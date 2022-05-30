@@ -76,10 +76,17 @@
                     // remove previous markers.
                     removeMarkers();
 
-                    // parse json data and draw markers on the map.
+                    // parse json data and draw new markers on the map.
                     const places = JSON.parse(data.data);
                     for (const [key, value] of Object.entries(places)) {
+
+                        // a marker object
                         var marker = L.marker([value.lat, value.lng]).addTo(mapapi);
+
+                        // a popup bound to the marker
+                        var popup = L.popup()
+                            .setContent(key);
+                        marker.bindPopup(popup);
                         markers.results.push(marker);
                     }
                 }
