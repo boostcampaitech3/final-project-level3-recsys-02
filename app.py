@@ -15,7 +15,7 @@ async def main(kwargs):
 
     while True:
         try:
-            batch = await broker.pull(kwargs.batch, timeout=1.0)
+            batch = await broker.pull(kwargs.batch, timeout=0.5)
 
             """
             여기 inference logic 넣어주세요.
