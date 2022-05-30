@@ -24,8 +24,14 @@ async def main(kwargs):
 
             if batch:
                 for headers, data in batch:
-                    payload = {}
+                    # ~ 유저 아이디
                     key = headers.get('key')
+                    payload = {}
+
+                    """
+                    유저 아이디 가져오는 부분이랑 결과 리턴 사이에서 inference logic 이 실행
+                    """
+
                     for index in range(10):
                         ty = random.uniform(-0.001, 0.001)
                         lat = data['latitude'] + ty
@@ -36,6 +42,8 @@ async def main(kwargs):
                             'lng': lng,
                         }
                         payload[str(index)] = place
+
+                    # 결과 리턴
                     data = json.dumps(payload).encode()
                     await broker.createKey(key=key, value=data)
         except:
