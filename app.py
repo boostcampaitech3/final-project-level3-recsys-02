@@ -7,19 +7,17 @@ from modules.events import ServerLog
 from models.model import ContentBasedRecommender
 from models.model import CollaborativeRecommender
 
-import random
 
-
-async def main(kwargs):
+async def main(kwargs: argparse.Namespace):
     logger = ServerLog()
     broker = Broker(kwargs.host, logger)
     await broker.connect()
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
     await broker.createBucket('inference')
 
-    model1 = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/','final_embeddings')
-    model2 = CollaborativeRecommender('/opt/ml/final-project-level3-recsys-02/data/','pu_embeddings_1km')
-    
+    model1 = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'final_embeddings')
+    model2 = CollaborativeRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'pu_embeddings_1km')
+
     while True:
         try:
             batch = await broker.pull(kwargs.batch, timeout=0.5)
@@ -40,24 +38,11 @@ async def main(kwargs):
                     """
                     topk = model2.recommend((data['longitude'], data['latitude']), '5b61c7658f8242cb2a1b1028')
 
-                    # payload['topk'] = topk
-                    # for index in range(10):
-                    #     ty = random.uniform(-0.001, 0.001)
-                    #     lat = data['latitude'] + ty
-                    #     tx = random.uniform(-0.001, 0.001)
-                    #     lng = data['longitude'] + tx
-                    #     place = {
-                    #         'lat': lat,
-                    #         'lng': lng,
-                    #     }
-
-                        # payload[str(index)] = place
-                    # print(topk)
                     for place in topk:
                         # print(place)
                         PlaceInfo = {}
                         PlaceInfo['name'] = place
-                        lon,lat = model2.map_loader.place[model2.map_loader.place['placeID'] == place]['map'].values[0]
+                        lon, lat = model2.map_loader.place[model2.map_loader.place['placeID'] == place]['map'].values[0]
                         PlaceInfo['latitude'] = lat
                         PlaceInfo['longitude'] = lon
                         payload[place] = PlaceInfo
@@ -65,8 +50,8 @@ async def main(kwargs):
                     # 결과 리턴
 
                     print(payload)
-                    data = json.dumps(payload,ensure_ascii=False).encode()
-                    
+                    data = json.dumps(payload, ensure_ascii=False).encode()
+
                     await broker.createKey(key=key, value=data)
         except:
             import traceback
@@ -81,4 +66,5 @@ if __name__ == '__main__':
     config.add_argument('--subject', type=str, required=True, help='a subject name to subscribe to')
     config.add_argument('--batch', default=100, type=int, help='determine a batch size to be inferred at a time')
     args = config.parse_args()
+    print(type(args))
     asyncio.run(main(args))
