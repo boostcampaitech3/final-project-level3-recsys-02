@@ -8,6 +8,8 @@ import pickle
 
 
 class MapLoader:
+    """현재 GPS기반으로 반경 r km 내의 음식점 리스트를 반환해주는 Class
+    """
     def __init__(self, data_dir):
         with open(data_dir+"/food.pickle", "rb")  as f:
             place = pickle.load(f)
@@ -23,6 +25,16 @@ class MapLoader:
     
     
     def distance_from_coord(self, o_coord, d_coord):
+        """두 지점의 위경도 좌표를 받아 거리를 계산해주는 함수
+
+        Args:
+            o_coord (tuple(lon,lat)): 지점1의 경도,위도 형식의 튜플
+            d_coord (tuple(lon,lat)): 지점1의 경도,위도 형식의 튜플
+
+        Returns:
+            int: 두 지점사이의 거리(km)
+        """
+
         x1, y1 = radians(o_coord[0]), radians(o_coord[1])
         x2, y2 = radians(d_coord[0]), radians(d_coord[1])
         dlon = x2 - x1
@@ -40,15 +52,26 @@ class MapLoader:
     #     return name
 
     def filtermap(self, coor, r=0.5):
+        """현 지점 기준 반경 r km까지의 음식점 리스트 반환
+
+        Args:
+            coor (tuple): (경도,위도)
+            r (float, optional): Defaults to 0.5(km)
+
+        Returns:
+            List: 음식점이름+주소(placeID)
+        """
         name=[]
         lon,lan = coor[0], coor[1]
         maxLon, maxlan = coor[0] + 0.00028 * r/0.028 , coor[1] + 0.00028 * r/0.031 
         minLon, minlan = coor[0] - 0.00028 * r/0.028 , coor[1] - 0.00028 * r/0.031
         mask1 = (self.place.latitude >= minlan) & (self.place.latitude < maxlan) & (self.place.longitude >= minLon) & (self.place.longitude < maxLon)
         
-        return self.place.loc[mask1,:]['placeID']
+        return self.place.loc[mask1,:]['placeID'].values.tolist()
 
 class ReviewLoader:
+    """리뷰데이터를 통해 user-item matrix를 생성
+    """
     def __init__(self, data_dir, place_list):
         review_df = pd.read_csv(data_dir + 'review.csv')
         review_df = review_df[review_df.placeID.isin(place_list)].reset_index(drop=True)
@@ -64,6 +87,15 @@ class ReviewLoader:
         self.freq_df = freq_df
     
     def get_user_ratings(self, user_id, place2id):
+        """user별 방문 및 평가한 음식점의 정보
+
+        Args:
+            user_id (str): user Hash값
+            place2id (int): 장소의 Index
+
+        Returns:
+            np.array: user가 방문한 음식점 행렬
+        """
         visited_df = self.freq_df[self.freq_df['userHash'] == user_id]
         ratings = np.zeros((self.n_place,))
         for i,v in visited_df.iterrows():
@@ -73,6 +105,8 @@ class ReviewLoader:
 
 
 class ContentBasedRecommender:
+    """음식점 metadata를 이용한 추천모델 (Content-Based)
+    """
     def __init__(self, data_dir, filename):
         self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir,filename)
         self.cossim = cosine_similarity(np.array(self.place_emb))
@@ -80,6 +114,16 @@ class ContentBasedRecommender:
 
     
     def get_nearest_cossim(self, nearest_list, place_id, k=5):
+        """metapath2vec을 통한 음식점의 embedding vector가 유사한 k개의 음식점을 추천
+
+        Args:
+            nearest_list (List): 반경 r km내의 음식점리스트
+            place_id (int): 선택 음식점의 인덱스
+            k (int, optional): Defaults to 5(음식점 개수)
+
+        Returns:
+            List: 해당음식점과 embedding vector 거리가 유사한 k개의 음식점리스트
+        """
         nearest_ids = [self.place2id[n] for n in nearest_list]
         nearest_cossim = self.cossim[place_id, nearest_ids[:]]
         topk = np.argsort(nearest_cossim)[::-1][1:k+1]
@@ -87,12 +131,23 @@ class ContentBasedRecommender:
     
     
     def recommend(self, coor, place_id):
+        """유저의 현재 위경도 좌표를 기반으로 선택한 음식점과 가장 유사한 K개의 음식점 추천(Metapath2vec 임베딩기반)
+
+        Args:
+            coor (tuple): (경도,위도)
+            place_id (int): 선택 음식점의 인덱스
+
+        Returns:
+            List: k개의 음식점리스트
+        """
         nearest_list = self.map_loader.filtermap(coor)
         topk = self.get_nearest_cossim(nearest_list, place_id)
         return topk
 
 
 class CollaborativeRecommender:
+    """User 방문정보를 이용한 추천모델(Item-Based Collaborating Filtering)
+    """
     def __init__(self, data_dir, filename):
         self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir,filename)
         self.cossim = cosine_similarity(np.array(self.place_emb))
@@ -107,7 +162,17 @@ class CollaborativeRecommender:
         self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
 
 
-    def recommend(self, coor, user_id, k=10):
+    def recommend(self, coor, user_id, k=5):
+        """_summary_
+
+        Args:
+            coor (tuple): (경도,위도)
+            user_id (str): user Hash값
+            k (int, optional): Defaults to 5(개)
+
+        Returns:
+            List: k개의 음식점리스트
+        """
         preds = []
         topk = []
 
