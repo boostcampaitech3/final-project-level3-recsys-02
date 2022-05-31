@@ -113,7 +113,7 @@ class Broker:
         except TimeoutError:
             return False
 
-    async def pull(self, batchSize: int, timeout: float = 5.0) -> list:
+    async def pull(self, batchSize: int, timeout: float = 0.5) -> list:
         """
         캐싱된 Payload 를 배치 사이즈만큼 가져옵니다.
 
