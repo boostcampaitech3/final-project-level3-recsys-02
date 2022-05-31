@@ -4,8 +4,8 @@ import json
 # from tkinter import _PlaceInfo
 from modules.broker import Broker
 from modules.events import ServerLog
-from models.model import ContentBasedRecommender
-from models.model import CollaborativeRecommender
+from models.model import ContentBasedRecommender, PopularityRecommender
+from models.model import NoRatingCollaborativeRecommender
 
 
 async def main(kwargs: argparse.Namespace):
@@ -15,8 +15,9 @@ async def main(kwargs: argparse.Namespace):
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
     await broker.createBucket('inference')
 
-    model1 = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'final_embeddings')
-    model2 = CollaborativeRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'pu_embeddings_1km')
+    pp = PopularityRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'pu_embeddings_1km') 
+    cb = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'final_embeddings')
+    cf = NoRatingCollaborativeRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'pu_embeddings_1km')
 
     while True:
         try:
@@ -36,19 +37,28 @@ async def main(kwargs: argparse.Namespace):
                     """
                     유저 아이디 가져오는 부분이랑 결과 리턴 사이에서 inference logic 이 실행
                     """
-                    topk = model2.recommend((data['longitude'], data['latitude']), '5b61c7658f8242cb2a1b1028')
+                    
+                    coor = (data['longitude'], data['latitude'])
+                    if len(data['preferences']) == 0:
+                        topk = pp.recommend(coor, k=10)
+                    elif len(data['preferences']) < 3:
+                        for preference in data['preferences']:
+                            topk = cb.recommend(coor, preference, k=int(10/len(data['preferenes'])))
+                    else :
+                        topk = cb.recommend(coor, data['preferences'][-1], k=5)
+                        cf_topk = cf.recommend(coor, data['preferences'], k=5)
+                        topk.extend(cf_topk)
 
                     for place in topk:
                         # print(place)
                         PlaceInfo = {}
                         PlaceInfo['name'] = place
-                        lon, lat = model2.map_loader.place[model2.map_loader.place['placeID'] == place]['map'].values[0]
+                        lon, lat = pp.map_loader.place[pp.map_loader.place['placeID'] == place]['map'].values[0]
                         PlaceInfo['latitude'] = lat
                         PlaceInfo['longitude'] = lon
                         payload[place] = PlaceInfo
 
                     # 결과 리턴
-
                     print(payload)
                     data = json.dumps(payload, ensure_ascii=False).encode()
 

@@ -113,6 +113,7 @@ class ContentBasedRecommender:
         self.map_loader = MapLoader(data_dir=data_dir)
         self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
 
+
     def get_nearest_cossim(self, nearest_list, place_id, k=5):
         """metapath2vec을 통한 음식점의 embedding vector가 유사한 k개의 음식점을 추천
 
@@ -124,12 +125,12 @@ class ContentBasedRecommender:
         Returns:
             List: 해당음식점과 embedding vector 거리가 유사한 k개의 음식점리스트
         """
-        nearest_ids = [self.place2id[n] for n in nearest_list]
-        nearest_cossim = self.cossim[place_id, nearest_ids[:]]
-        topk = np.argsort(nearest_cossim)[::-1][1:k+1]
-        return [self.id2place[nearest_ids[i]] for i in topk]
+        nearest_cossim = self.cossim[place_id, nearest_list]
+        topk = np.argsort(nearest_cossim)[-(k+1):-1]
+        return [self.id2place[nearest_list[i]] for i in topk]
 
-    def recommend(self, coor, place_id):
+
+    def recommend(self, coor, place_id, k=5):
         """유저의 현재 위경도 좌표를 기반으로 선택한 음식점과 가장 유사한 K개의 음식점 추천(Metapath2vec 임베딩기반)
 
         Args:
@@ -140,7 +141,7 @@ class ContentBasedRecommender:
             List: k개의 음식점리스트
         """
         nearest_list = self.map_loader.filtermap(coor)
-        topk = self.get_nearest_cossim(nearest_list, place_id)
+        topk = self.get_nearest_cossim(nearest_list, self.place2id[place_id], k)
         return topk
 
 
@@ -157,9 +158,11 @@ class CollaborativeRecommender:
         self.knn.fit(self.place_emb)
         self.knn_distances, self.knn_indices = self.knn.kneighbors(self.place_emb, n_neighbors=30)
         
-        self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
+        
         temp = self.map_loader.place.copy()
         self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
+        self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
+
 
     def recommend(self, coor, user_id, k=5):
         """_summary_
@@ -206,14 +209,15 @@ class PopularityRecommender:
         review_count = self.review_loader.review.value_counts('placeID')
         self.review_loader.review['count'] = self.review_loader.review['placeID'].apply(lambda x: review_count[x])
         self.review_loader.review = self.review_loader.review.drop_duplicates(['placeID'])
+        
+        temp = self.map_loader.place.copy()
+        self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
 
         self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
         self.map_loader.place = pd.merge(self.map_loader.place, self.review_loader.review[['placeID', 'count']], how='left', on='placeID')
         
         self.map_loader.place.sort_values('count', ascending=False, inplace=True)
-        
-        temp = self.map_loader.place.copy()
-        self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
+
 
     def recommend(self, coor: tuple, k:int =10) -> list:
         """인기도 기반 추천 함수
@@ -227,6 +231,48 @@ class PopularityRecommender:
         """
         place_list = self.map_loader.filtermap(coor)[:k]
         topk = [self.id2place[p_id] for p_id in place_list]
+        return topk
+
+
+class NoRatingCollaborativeRecommender:
+    """User 방문정보를 이용한 추천모델(Item-Based Collaborating Filtering)
+    """
+    def __init__(self, data_dir, filename):
+        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir, filename)
+        self.cossim = cosine_similarity(self.place_emb)
+        self.map_loader = MapLoader(data_dir=data_dir)
+        self.review_loader = ReviewLoader(data_dir=data_dir, place_list=self.map_loader.place.placeID.unique())
+        
+        temp = self.map_loader.place.copy()
+        self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
+        self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
+
+
+    def recommend(self, coor, visited_list, k=5):
+        """_summary_
+
+        Args:
+            coor (tuple): (경도,위도)
+            user_id (str): user Hash값
+            k (int, optional): Defaults to 5(개)
+
+        Returns:
+            List: k개의 음식점리스트
+        """
+        place_list = self.map_loader.filtermap(coor)
+        visited_ids = [self.place2id[v] for v in visited_list]
+        
+        preds = dict()
+        
+        for pid in place_list:
+            s = self.cossim[pid]
+            total_s = np.sum(s[visited_ids])
+    
+            preds[self.id2place[pid]] = total_s
+
+        topk = sorted(preds.items(), key= lambda x: x[1], reverse=True)
+        topk = [_[0] for _ in topk][:k]
+        
         return topk
 
 
