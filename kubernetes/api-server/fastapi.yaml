@@ -25,8 +25,9 @@ data:
     uvicorn==0.17.6
     nats-py==2.1.2
     slowapi==0.1.5
-    sse-starlette==0.10.3
+    Jinja2==3.1.2
   __init__.py: |
+
   broker.py: |
       import json
       import nats
@@ -35,14 +36,13 @@ data:
       from nats.js.errors import NotFoundError
       from nats.js.errors import KeyDeletedError
       
-      
       class Broker:
           def __init__(self, host: str, logger):
               """
               Nats client 클래스입니다.
               createStream() 과 subscribe() 에서 인자로 전달되는 stream 은 논리적으로 분리된 공간이고
               subject 가 메시지 큐라고 생각하시면 됩니다.
-      
+
               :param host: a kubernetes service IP:port string
               """
               self.logger = logger
@@ -51,19 +51,19 @@ data:
               self.__jetstream = None
               self.__subscriber = None
               self.__bucket = None
-      
+
           async def connect(self):
               """
               Jetstream 파이썬 API 가 비동기 클라이언트만 지원하므로 비동기 접속
               __init__() 에서 호출 불가능합니다.
               FastAPI 가 uvloop 을 레버리징하므로 파이썬 asyncio event loop 에서 호출하지 마시고
               아래 예시와 같이 호출해주세요.
-      
+
               # 예시
               @app.on_event('startup')
               async def init():
                   await broker.connect()
-      
+
               :return:
               """
               try:
@@ -72,11 +72,11 @@ data:
                   self.logger.formatter('Successfully connected to the Nats server.')
               except TimeoutError:
                   raise Exception(self.logger.formatter('Timed out on connecting to the Nats server.'))
-      
+
           async def createStream(self, stream: str, subjects: list):
               """
               stream 이름과 subjects 들을 생성합니다.
-      
+
               :param stream: a stream name to which subject belongs
               :param subjects: a list of subjects on which messages persist
               :return:
@@ -88,11 +88,11 @@ data:
                   raise Exception(self.logger.formatter('Timed out on creating a stream'))
               except BadRequestError:
                   raise Exception(self.logger.formatter('Stream name already exists.'))
-      
+
           async def removeStream(self, stream: str):
               """
               stream 을 삭제합니다.
-      
+
               :param stream:
               :return:
               """
@@ -101,11 +101,11 @@ data:
                   self.logger.formatter(response)
               except TimeoutError:
                   raise Exception(self.logger.formattter('Timed out on removing a stream'))
-      
+
           async def subscribe(self, durable: str, stream: str, subject: str):
               """
               subscribe() 이후 pull() 가능합니다.
-      
+
               :param durable: a consumer identifier with which the Nats server identifies the queue
               :param stream: a stream name to which the subject belongs
               :param subject: a subject to subscribe to
@@ -116,7 +116,7 @@ data:
                   self.logger.formatter(await self.__subscriber.consumer_info())
               except TimeoutError:
                   raise Exception(self.logger.formatter('Timed out on a subscription.'))
-      
+
           async def publish(
                   self,
                   subject: str,
@@ -128,7 +128,7 @@ data:
               """
               client hashing 을 통해 나온 key 값을 key-value 스토어에 생성하고 Nats server 에 데이터를 publish 합니다.
               Payload agnostic => 데이터 타입에 상관 없이 publish
-      
+
               :param subject: a subject to publish to
               :param payload: data bytes
               :param timeout: timeout
@@ -137,15 +137,16 @@ data:
               :return: True if the publishing succeeded | False if timed out on publishing
               """
               try:
+                  await self.createKey(key=headers.get('key'), value=b'')
                   await self.__jetstream.publish(subject, payload, timeout, stream, headers)
                   return True
               except TimeoutError:
                   return False
-      
+
           async def pull(self, batchSize: int, timeout: float = 5.0) -> list:
               """
               캐싱된 Payload 를 배치 사이즈만큼 가져옵니다.
-      
+
               :param batchSize: determines the size of a list to pull
               :param timeout: timeout
               :return: a list of user request to be inferred
@@ -160,11 +161,11 @@ data:
                   return batch
               except TimeoutError:
                   pass
-      
+
           async def createBucket(self, name: str):
               """
               Bucket 생성합니다.
-      
+
               :param name: a bucket name to be created
               :return:
               """
@@ -172,11 +173,11 @@ data:
                   self.__bucket = await self.__jetstream.create_key_value(bucket=name)
               except TimeoutError:
                   raise Exception(self.logger.formatter('Timed out on creating a bucket.'))
-      
+
           async def fetchResult(self, key: str) -> object:
               """
               key 에서 값 가져오기
-      
+
               :param key:
               :return:
               """
@@ -187,7 +188,7 @@ data:
                   return None
               except KeyDeletedError:
                   return None
-      
+
           async def createKey(self, key: str, value: bytes):
               """
               Bucket 에 key 생성하고 value 추가
@@ -200,7 +201,7 @@ data:
               except:
                   self.logger.formatter('Timed out on creating and assigning a key-value item.')
                   return None
-      
+
           async def removeKey(self, key: str):
               """
               Bucket 에서 key 삭제
@@ -233,121 +234,219 @@ data:
       import asyncio
       from fastapi import FastAPI
       from fastapi import Request
+      from fastapi.templating import Jinja2Templates
       import hashlib
       from broker import Broker
       from events import ServerLog
       import time
-      
+
       # Rate Limiting for QOS
       from slowapi import Limiter, _rate_limit_exceeded_handler
       from slowapi.util import get_remote_address
       from slowapi.errors import RateLimitExceeded
-      
-      # Server Sent Events Implementation
-      from sse_starlette.sse import EventSourceResponse
-      
+
       """
-      sse => Server Side Event
-      Generator.timeBound | Generator.iterBound 
-      Both are static wrapper functions
-      
       slowapi => Throttling (rate limit 설정) 요청 수 제한을 위해 in-memory storage 에 요청을 캐싱하는 구현체
       rate limits string format
       [count] [per|/] [n (optional)] [second|minute|hour|day|month|year]
       출처 : "https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation"
       """
-      
+
       # global
-      HOST = '192.168.1.101:30042'  # Kubernetes Service IP for the broker
+      HOST = '10.107.112.241:4222'  # Kubernetes Service IP for the broker
       limiter = Limiter(key_func=get_remote_address)
       app = FastAPI()
+      templates = Jinja2Templates(directory='/app/templates')
       app.state.limiter = limiter
       app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
       logger = ServerLog()
       broker = Broker(HOST, logger)
-      
+
       # subjects for debugging only
       testSubjects = [
-          'byp-input',
-          'djp-input',
-          'jyy-input',
-          'mjk-input',
-          'dhl-input',
+          'input',
       ]
-      
-      
-      @app.on_event('startup')
-      async def init():
-          await broker.connect()
-          await broker.removeStream('inference')
-          await broker.createStream('inference', testSubjects)
-          await broker.createBucket('inference')
-      
-      
+
+
+      async def getResult(key: str, timeout: float, interval: float) -> object:
+          timeElapsed = 0.0
+          timeStarted = time.perf_counter()
+          while timeElapsed <= timeout:
+              result = await broker.fetchResult(key)
+              if result:
+                  await broker.removeKey(key)
+                  return result
+              timeElapsed += (time.perf_counter() - timeStarted)
+              await asyncio.sleep(interval)
+          await broker.removeKey(key)
+          return None
+
+
       async def clientBasedHashing(request: Request):
           if request is not None:
               client = str(dict(request)['client']).encode()
               payload = await request.body()
               key = hashlib.sha256(client + payload).hexdigest()
               return payload, key
-      
-      
-      async def debug(request: Request, stream, subject, key: str):
-          payload = await request.body()
-          response = await broker.publish(subject, payload, 5.0, stream, {'key': key})
-          if response:
-              timeout = 2.0
-              timeElapsed = 0.0
-              timeStarted = time.perf_counter()
-              interval = 0.5
-              while timeElapsed <= timeout:
-                  result = await broker.fetchResult(key)
-      
-                  # fetch succeeded
-                  if result is not None:
-                      await broker.removeKey(key)
-                      return {'response': result}
-      
-                  timeElapsed += (time.perf_counter() - timeStarted)
-                  await asyncio.sleep(interval)
-              return {'response': 'Unable to fetch the result'}
+
+
+      @app.on_event('startup')
+      async def init():
+          await broker.connect()
+          # await broker.removeStream('inference')
+          await broker.createStream('inference', testSubjects)
+          await broker.createBucket('inference')
+
+
+      @app.get('/')
+      @limiter.limit('3/second')
+      async def main(request: Request):
+          return templates.TemplateResponse('map.html', {'request': request})
+
+
+      @app.post('/inference')
+      @limiter.limit('3/second')
+      async def inference(request: Request):
+          payload, key = await clientBasedHashing(request)
+          ack = await broker.publish('input', payload, 5.0, 'inference', {'key': key})
+          if ack:
+              result = await getResult(key, 5.0, 0.5)
+              if result:
+                  return {'status': True, 'data': result}
+              else:
+                  return {'status': False, 'data': 'Unable to fetch the result.'}
           else:
-              return {'response': 'Failed to publish due to the server timeout'}
-      
-      
-      @app.post('/inference/byp')
-      @limiter.limit('5/second')
-      async def inference0(request: Request):
-          output = await debug(request, 'inference', 'byp-input', 'byp-output')
-          return output
-      
-      
-      @app.post('/inference/djp')
-      @limiter.limit('5/second')
-      async def inference1(request: Request):
-          output = await debug(request, 'inference', 'djp-input', 'djp-output')
-          return output
-      
-      
-      @app.post('/inference/jyy')
-      @limiter.limit('5/second')
-      async def inference2(request: Request):
-          output = await debug(request, 'inference', 'jyy-input', 'jyy-output')
-          return output
-      
-      
-      @app.post('/inference/mjk')
-      @limiter.limit('5/second')
-      async def inference3(request: Request):
-          output = await debug(request, 'inference', 'mjk-input', 'mjk-output')
-          return output
-      
-      
-      @app.post('/inference/dhl')
-      @limiter.limit('5/second')
-      async def inference4(request: Request):
-          output = await debug(request, 'inference', 'dhl-input', 'dhl-output')
-          return output
+              return {'status': False, 'data': 'Timed out on publishing a message.'}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: templates-cm
+  labels:
+    app: api-server
+data:
+  map.html: |
+      <!DOCTYPE html>
+      <head>    
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+  
+              <script>
+                  L_NO_TOUCH = false;
+                  L_DISABLE_3D = false;
+              </script>
+  
+          <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+          <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+          <script src="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.js"></script>
+          <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+          <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+          <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.css"/>
+          <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css"/>
+          <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css"/>
+          <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
+          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+          <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+  
+                  <meta name="viewport" content="width=device-width,
+                      initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                  <style>
+                      #map_5d0c3cd8484d4f8a1642815f065b1271 {
+                          position: relative;
+                          width: 100.0%;
+                          height: 80.0%;
+                          left: 0.0%;
+                          top: 0.0%;
+                      }
+                  </style>
+      </head>
+      <body>
+                  <div class="folium-map" id="map_5d0c3cd8484d4f8a1642815f065b1271" ></div>
+  
+                  <p></p>
+                      <button onclick="inference()"> 추천 </button>
+                  <p id="current"></p>
+  
+      </body>
+      <script>
+  
+                  var mapapi = L.map(
+                      "map_5d0c3cd8484d4f8a1642815f065b1271",
+                      {
+                          center: [37.476559992, 126.981638570],
+                          crs: L.CRS.EPSG3857,
+                          zoom: 17,
+                          zoomControl: true,
+                          preferCanvas: false,
+                          bottom: "5%",
+                      }
+                  )
+                  .on('popupopen', function(e) {
+                      console.log(e);
+                  });
+  
+                  var markers = {
+                      results: [],
+                  };
+  
+                  var tile_layer_0a4787307dbd68cc33a93ae4432df960 = L.tileLayer(
+                      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+                  ).addTo(mapapi);
+  
+                  function removeMarkers() {
+                      if (markers.results) {
+                          for (marker of markers.results) {
+                              marker.remove();
+                          }
+                      }
+                  }
+  
+                  function dataHandler(data) {
+                      if (data.status) {
+                          // remove previous markers.
+                          removeMarkers();
+  
+                          // parse json data and draw new markers on the map.
+                          const places = JSON.parse(data.data);
+                          for (const [key, value] of Object.entries(places)) {
+  
+                              // a marker object
+                              var marker = L.marker([value.latitude, value.longitude]).addTo(mapapi);
+  
+                              // a popup bound to the marker
+                              var popup = L.popup()
+                                  .setContent(value.name);
+                              marker.bindPopup(popup);
+                              markers.results.push(marker);
+                          }
+                      }
+                      else {
+                          alert(data.data);
+                      }
+                  }
+  
+                  function inference() {
+                      var center = mapapi.getCenter();
+  
+                      fetch(
+                          "http://61.254.240.172:30000/inference", {
+                              method: "POST",
+                              body: JSON.stringify({
+                                  "latitude": center.lat,
+                                  "longitude": center.lng,
+                              })
+                          })
+                          .then((response) => response.json())
+                          .then((data) => {
+                              dataHandler(data);
+                          })
+                          .catch((error) => {
+                              alert(error);
+                          });
+                  }
+  
+      </script>
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -371,6 +470,9 @@ spec:
       - name: api-server-volume
         configMap:
           name: api-server-cm
+      - name: templates-volume
+        configMap:
+          name: templates-cm
       containers:
       - name: api-server
         image: python:3.8
@@ -383,6 +485,8 @@ spec:
         volumeMounts:
         - name: api-server-volume
           mountPath: /app
+        - name: templates-volume
+          mountPath: /app/templates
         command:
         - "/bin/bash"
         - "-c"

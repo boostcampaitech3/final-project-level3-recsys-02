@@ -77,7 +77,7 @@ async def inference(request: Request):
     payload, key = await clientBasedHashing(request)
     ack = await broker.publish('input', payload, 5.0, 'inference', {'key': key})
     if ack:
-        result = await getResult(key, 2.0, 0.5)
+        result = await getResult(key, 5.0, 0.5)
         if result:
             return {'status': True, 'data': result}
         else:

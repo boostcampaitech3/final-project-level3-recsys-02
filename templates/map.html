@@ -52,7 +52,10 @@
                     preferCanvas: false,
                     bottom: "5%",
                 }
-            );
+            )
+            .on('popupopen', function(e) {
+                console.log(e);
+            });
 
             var markers = {
                 results: [],
@@ -81,11 +84,11 @@
                     for (const [key, value] of Object.entries(places)) {
 
                         // a marker object
-                        var marker = L.marker([value.lat, value.lng]).addTo(mapapi);
+                        var marker = L.marker([value.latitude, value.longitude]).addTo(mapapi);
 
                         // a popup bound to the marker
                         var popup = L.popup()
-                            .setContent(key);
+                            .setContent(value.name);
                         marker.bindPopup(popup);
                         markers.results.push(marker);
                     }
@@ -99,11 +102,11 @@
                 var center = mapapi.getCenter();
 
                 fetch(
-                    'http://127.0.0.1:8000/inference', {
-                        method: 'POST',
+                    "http://127.0.0.1:8000/inference", {
+                        method: "POST",
                         body: JSON.stringify({
-                            'latitude': center.lat,
-                            'longitude': center.lng,
+                            "latitude": center.lat,
+                            "longitude": center.lng,
                         })
                     })
                     .then((response) => response.json())
