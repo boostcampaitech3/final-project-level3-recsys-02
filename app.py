@@ -4,8 +4,8 @@ import json
 # from tkinter import _PlaceInfo
 from modules.broker import Broker
 from modules.events import ServerLog
-from models.model import CossimRecommender
-from models.model import Recommender
+from models.model import ContentBasedRecommender
+from models.model import CollaborativeRecommender
 
 import random
 
@@ -17,8 +17,8 @@ async def main(kwargs):
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
     await broker.createBucket('inference')
 
-    model1 = CossimRecommender('/opt/ml/final-project-level3-recsys-02/data/','final_embeddings')
-    model2 = Recommender('/opt/ml/final-project-level3-recsys-02/data/','pu_embeddings_1km')
+    model1 = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/','final_embeddings')
+    model2 = CollaborativeRecommender('/opt/ml/final-project-level3-recsys-02/data/','pu_embeddings_1km')
     
     while True:
         try:
@@ -54,7 +54,7 @@ async def main(kwargs):
                         # payload[str(index)] = place
                     # print(topk)
                     for place in topk:
-                        print(place)
+                        # print(place)
                         PlaceInfo = {}
                         PlaceInfo['name'] = place
                         lon,lat = model2.map_loader.place[model2.map_loader.place['placeID'] == place]['map'].values[0]
@@ -64,7 +64,7 @@ async def main(kwargs):
 
                     # 결과 리턴
 
-                    # print(payload)
+                    print(payload)
                     data = json.dumps(payload,ensure_ascii=False).encode()
                     
                     await broker.createKey(key=key, value=data)
