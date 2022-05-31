@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from typing import Tuple
 from util import remap_id
 
 like_grouping = {"단체모임 하기 좋아요" : ["단체"], "인테리어가 멋져요" : ["감성"], "술이 다양해요" : ["술"], "오래 머무르기 좋아요" : ["단체"], \
@@ -52,7 +53,15 @@ type_grouping = \
 }
 
 
-def make_type_data(raw_df):
+def make_type_data(raw_df: pd.core.frame.DataFrame) -> pd.core.frame.DataFrame:
+    """ 장소 하나당 여러 개의 타입이 속해있는 경우 하나의 row에 하나의 type으로 변환한 place type dataframe 생성
+
+    Args:
+        raw_df (pandas.core.frame.DataFrame): placeInfo dataframe (raw data)
+
+    Returns:
+        pandas.core.frame.DataFrame: type dataframe
+    """
     t_df = raw_df[['placeID', 'placeType']].copy()
     t_df.columns = ['placeID', 'type']
     
@@ -66,8 +75,15 @@ def make_type_data(raw_df):
     return t_df
 
 
-def make_new_type_data(raw_df):
+def make_new_type_data(raw_df: pd.core.frame.DataFrame) -> pd.core.frame.DataFrame:
+    """기존 세부 place type을 gropuing
+
+    Args:
+        raw_df (pandas.core.frame.DataFrame): placeInfo dataframe (raw data)
     
+    Returns:
+        pandas.core.frame.DataFrame: new type(type clustering) dataframe
+    """
     def newcate(x):
         for _ in type_grouping.items():
             if x in _[1]:
@@ -79,9 +95,17 @@ def make_new_type_data(raw_df):
     return nt_df
 
 
-def make_like_data(df):
+def make_like_data(raw_df: pd.core.frame.DataFrame) -> pd.core.frame.DataFrame:
+    """ 이런점이 좋았어요(like) 데이터 grouping
+
+    Args:
+        raw_df (pd.core.frame.DataFrame): placeInfo dataframe (raw data)
+
+    Returns:
+        pd.core.frame.DataFrame: like gropuing dataframe
+    """
     like_df = pd.DataFrame([
-        [p_id, like, cnt] for p_id, likes in df[['placeID', 'like']].itertuples(index=False)
+        [p_id, like, cnt] for p_id, likes in raw_df[['placeID', 'like']].itertuples(index=False)
         for like, cnt in likes.items()
     ], columns=['placeID', 'likeTopic', 'cnt'])
 
@@ -107,8 +131,16 @@ def make_like_data(df):
     return like_df
 
 
-def make_meta_data(raw_df,meta_df_col):
-    # metadata 1개 컬럼으로
+def make_meta_data(raw_df: pd.core.frame.DataFrame, meta_df_col: list) -> pd.core.frame.DataFrame:
+    """ 여러 가지 메타 데이터 각각을 하나의 row로 1:1 매칭
+
+    Args:
+        raw_df (pd.core.frame.DataFrame): placeInfo dataframe (raw data)
+        meta_df_col (list): 사용할 meta dataframe information
+
+    Returns:
+        pd.core.frame.DataFrame: meta dataframe
+    """
     
     raw_df['meta'] = raw_df[meta_df_col[1]]
     for col in meta_df_col[2:]:
@@ -120,7 +152,16 @@ def make_meta_data(raw_df,meta_df_col):
     return meta_df
 
 
-def make_data(raw_df, meta_df_col= ['placeID', 'menulabel','ageLabel', 'ratingLabel', 'visitLabel', 'blogLabel']):
+def make_data(raw_df: pd.core.frame.DataFrame, meta_df_col: list = ['placeID', 'menulabel','ageLabel', 'ratingLabel', 'visitLabel', 'blogLabel']) -> Tuple[dict, list]:
+    """metapath2vec 학습을 위한 데이터 전처리 및 생성
+
+    Args:
+        raw_df (pd.core.frame.DataFrame): placeInfo dataframe (raw data)
+        meta_df_col (list, optional): 사용할 Meta information Defaults to ['placeID', 'menulabel','ageLabel', 'ratingLabel', 'visitLabel', 'blogLabel'].
+
+    Returns:
+        Tuple[dict, list]: place, id 변환 딕셔너리, heterogeneous graph 구축에 사용할 데이터 프레임 리스트
+    """
     t_df = make_type_data(raw_df)
     
     nt_df = make_new_type_data(raw_df)
