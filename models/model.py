@@ -190,6 +190,46 @@ class CollaborativeRecommender:
         topk = [_[0] for _ in topk][:k]
         return topk
 
+
+class PopularityRecommender:
+    def __init__(self, data_dir: str, filename: str):
+        """Cold User를 위한 인기도 기반 추천 모델입니다.
+
+        Args:
+            data_dir (str): 데이터 폴더 위치
+            filename (str): 임베딩 파일 이름
+        """
+        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir, filename)
+        self.map_loader = MapLoader(data_dir=data_dir)
+        self.review_loader = ReviewLoader(data_dir=data_dir, place_list=self.map_loader.place.placeID.unique())
+        
+        review_count = self.review_loader.review.value_counts('placeID')
+        self.review_loader.review['count'] = self.review_loader.review['placeID'].apply(lambda x: review_count[x])
+        self.review_loader.review = self.review_loader.review.drop_duplicates(['placeID'])
+
+        self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
+        self.map_loader.place = pd.merge(self.map_loader.place, self.review_loader.review[['placeID', 'count']], how='left', on='placeID')
+        
+        self.map_loader.place.sort_values('count', ascending=False, inplace=True)
+        
+        temp = self.map_loader.place.copy()
+        self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
+
+    def recommend(self, coor: tuple, k:int =10) -> list:
+        """인기도 기반 추천 함수
+
+        Args:
+            coor (tuple): (경도,위도)
+            k (int, optional): 추천할 음식점 개수
+
+        Returns:
+            list: k개의 음식점 리스트
+        """
+        place_list = self.map_loader.filtermap(coor)[:k]
+        topk = [self.id2place[p_id] for p_id in place_list]
+        return topk
+
+
 # class CossimRecommender:
 #     def __init__(self, data_dir, filename):
 
