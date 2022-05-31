@@ -1,5 +1,5 @@
 from math import sin, cos, sqrt, atan2, radians
-from util import create_embedding_file
+from models.util import create_embedding_file
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
@@ -65,7 +65,7 @@ class MapLoader:
         mask1 = (self.place.latitude >= minlan) & (self.place.latitude < maxlan) & (self.place.longitude >= minLon) & \
                 (self.place.longitude < maxLon)
         
-        return self.place.loc[mask1, :]['placeID'].values.tolist()
+        return self.place.loc[mask1, :]['placeIndex'].values.tolist()
 
 
 class ReviewLoader:
@@ -96,11 +96,12 @@ class ReviewLoader:
             np.array: user가 방문한 음식점 행렬
         """
         visited_df = self.freq_df[self.freq_df['userHash'] == user_id]
-        ratings = np.zeros((self.n_place,))
-        for i, v in visited_df.iterrows():
-            visited_id = place2id[v['placeID']]
-            ratings[visited_id] = v['count']
-        return ratings
+        visited_ids = []
+        ratings = []
+        for i,v in visited_df.iterrows():
+            visited_ids.append(place2id[v['placeID']])
+            ratings.append(v['count'])
+        return visited_ids, ratings
 
 
 class ContentBasedRecommender:
@@ -110,7 +111,8 @@ class ContentBasedRecommender:
         self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir, filename)
         self.cossim = cosine_similarity(self.place_emb)
         self.map_loader = MapLoader(data_dir=data_dir)
-    
+        self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
+
     def get_nearest_cossim(self, nearest_list, place_id, k=5):
         """metapath2vec을 통한 음식점의 embedding vector가 유사한 k개의 음식점을 추천
 
@@ -155,6 +157,7 @@ class CollaborativeRecommender:
         self.knn.fit(self.place_emb)
         self.knn_distances, self.knn_indices = self.knn.kneighbors(self.place_emb, n_neighbors=30)
         
+        self.map_loader.place['placeIndex'] = self.map_loader.place['placeID'].apply(lambda x: self.place2id[x])
         temp = self.map_loader.place.copy()
         self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
 
@@ -169,27 +172,23 @@ class CollaborativeRecommender:
         Returns:
             List: k개의 음식점리스트
         """
-        preds = []
+        preds = dict()
         topk = []
 
         place_list = self.map_loader.filtermap(coor)
-        place_ids = [self.place2id[p] for p in place_list]
-        ratings = self.review_loader.get_user_ratings(user_id, self.place2id)
+        visited_ids, ratings = self.review_loader.get_user_ratings(user_id, self.place2id)
         
-        for pid in place_ids:
-            indices = self.knn_indices[pid]
-            s = 1 - self.knn_distances[pid]
-            
-            total_sr = np.dot(s, ratings[indices])
-            total_s = np.sum(s)
-            
-            pred_un = total_sr / total_s
-            preds.append(pred_un)
+        for pid in place_list:
+            s = self.cossim[pid]
+            total_sr = np.dot(s[visited_ids], ratings)
+            total_s = np.sum(s[visited_ids])
 
-        for idx in np.argsort(preds)[::-1][:k]:
-            topk.append(place_ids[idx])
-        
-        return [self.id2place[pid] for pid in topk]
+            pred_un = total_sr / total_s
+            preds[self.id2place[pid]] = pred_un
+
+        topk = sorted(preds.items(), key= lambda x: x[1], reverse=True)
+        topk = [_[0] for _ in topk][:k]
+        return topk
 
 # class CossimRecommender:
 #     def __init__(self, data_dir, filename):
