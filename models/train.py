@@ -10,18 +10,18 @@ import pandas as pd
 import pickle
 
 
-def train(args:argparse.ArgumentParser):
+def train(args: argparse.Namespace):
     """Metapath2Vec 학습을 위한 코드
 
     Args:
         args (argparse.ArgumentParser): Metapath2Vec 학습 시 필요한 변수들이 담긴 객체
     """
     if args.make_metapath:
-        with open(args.data_dir + 'food.pickle', 'rb') as f :
+        with open(args.data_dir + 'food.pickle', 'rb') as f:
             raw_df = pickle.load(f)
         raw_df = raw_df[~raw_df.placeType.str.contains('성급')].reset_index().copy()
-        raw_df['placeID'] = raw_df.apply(lambda x : x['placeName'] + x['placeAddress'], axis = 1)
-        raw_df['placeID'] = raw_df['placeID'].apply(lambda x : x.replace(" ", ""))
+        raw_df['placeID'] = raw_df.apply(lambda x : x['placeName'] + x['placeAddress'], axis=1)
+        raw_df['placeID'] = raw_df['placeID'].apply(lambda x: x.replace(" ", ""))
         
         id2place, df_list = make_data(raw_df)
         graph = construct_graph(*df_list)

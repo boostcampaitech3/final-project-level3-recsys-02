@@ -12,7 +12,6 @@ from reading_data import DataReader, Metapath2vecDataset
 
 
 class SkipGramModel(nn.Module):
-
     def __init__(self, emb_size: int, emb_dimension: int):
         """SkipGram 모델 클래스
         metapath를 skipgram 방식으로 loss를 계산합니다.
@@ -87,7 +86,6 @@ class Metapath2VecTrainer:
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
         if self.use_cuda:
             self.skip_gram_model.cuda()
-
 
     def train(self):
         """Metapath2vec 학습 함수입니다.

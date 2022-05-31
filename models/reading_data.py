@@ -104,7 +104,7 @@ class DataReader:
 class Metapath2vecDataset(Dataset):
     """Metapath2Vec 학습 데이터 클래스
     """
-    def __init__(self, data:DataReader, window_size:int):
+    def __init__(self, data: DataReader, window_size: int):
         """Metapath2Vec 학습 데이터 생성을 위한 변수 설정
 
         Args:
@@ -123,7 +123,7 @@ class Metapath2vecDataset(Dataset):
         """
         return self.data.sentences_count
 
-    def __getitem__(self, idx:int) -> list:
+    def __getitem__(self, idx: int) -> list:
         # return the list of pairs (center, context, 5 negatives)
         """Metapath2Vec 학습에 사용되는 Data Return
 
@@ -154,12 +154,11 @@ class Metapath2vecDataset(Dataset):
                             assert v < self.data.word_count
                             if i == j:
                                 continue
-                            pair_catch.append((u, v, self.data.getNegatives(v,5)))
+                            pair_catch.append((u, v, self.data.getNegatives(v, 5)))
                     return pair_catch
 
-
     @staticmethod
-    def collate(batches:list) -> tuple:
+    def collate(batches: list) -> tuple:
         """Batch에 담긴 list들을 모델에 맞게 변환
 
         Args:

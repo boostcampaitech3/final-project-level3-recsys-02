@@ -1,5 +1,5 @@
 from math import sin, cos, sqrt, atan2, radians
-from models.util import create_embedding_file
+from util import create_embedding_file
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
@@ -11,18 +11,16 @@ class MapLoader:
     """현재 GPS기반으로 반경 r km 내의 음식점 리스트를 반환해주는 Class
     """
     def __init__(self, data_dir):
-        with open(data_dir+"/food.pickle", "rb")  as f:
+        with open(data_dir+"/food.pickle", "rb") as f:
             place = pickle.load(f)
             
-        place['placeID'] = place.apply(lambda x : x['placeName'] + x['placeAddress'], axis = 1)
-        place['placeID'] = place['placeID'].apply(lambda x : x.replace(" ", ""))
-        place['map'] = place[['longitude','latitude']].apply(lambda x: tuple(x.values),axis=1)
+        place['placeID'] = place.apply(lambda x: x['placeName'] + x['placeAddress'], axis=1)
+        place['placeID'] = place['placeID'].apply(lambda x: x.replace(" ", ""))
+        place['map'] = place[['longitude', 'latitude']].apply(lambda x: tuple(x.values), axis=1)
         self.place = place[~place.placeType.str.contains('성급')].reset_index().copy()
 
-
-        self.R = 6373.0
+        self.R = 6373.0     # the earth radius
         self.r = 1
-    
     
     def distance_from_coord(self, o_coord, d_coord):
         """두 지점의 위경도 좌표를 받아 거리를 계산해주는 함수
@@ -43,7 +41,6 @@ class MapLoader:
         c = 2 * atan2(sqrt(a), sqrt(1 - a))    
         return self.R * c
 
-
     # def filtermap(self, coor):
     #     name=[]
     #     for idx,plc in enumerate(self.place['map']):
@@ -51,7 +48,7 @@ class MapLoader:
     #             name.append(self.place.loc[idx]['placeID'])
     #     return name
 
-    def filtermap(self, coor, r=0.5):
+    def filtermap(self, coor: tuple, r=0.5):
         """현 지점 기준 반경 r km까지의 음식점 리스트 반환
 
         Args:
@@ -61,13 +58,15 @@ class MapLoader:
         Returns:
             List: 음식점이름+주소(placeID)
         """
-        name=[]
-        lon,lan = coor[0], coor[1]
-        maxLon, maxlan = coor[0] + 0.00028 * r/0.028 , coor[1] + 0.00028 * r/0.031 
-        minLon, minlan = coor[0] - 0.00028 * r/0.028 , coor[1] - 0.00028 * r/0.031
-        mask1 = (self.place.latitude >= minlan) & (self.place.latitude < maxlan) & (self.place.longitude >= minLon) & (self.place.longitude < maxLon)
+        name = []
+        lon, lan = coor[0], coor[1]
+        maxLon, maxlan = coor[0] + 0.00028 * r/0.028, coor[1] + 0.00028 * r/0.031
+        minLon, minlan = coor[0] - 0.00028 * r/0.028, coor[1] - 0.00028 * r/0.031
+        mask1 = (self.place.latitude >= minlan) & (self.place.latitude < maxlan) & (self.place.longitude >= minLon) & \
+                (self.place.longitude < maxLon)
         
-        return self.place.loc[mask1,:]['placeID'].values.tolist()
+        return self.place.loc[mask1, :]['placeID'].values.tolist()
+
 
 class ReviewLoader:
     """리뷰데이터를 통해 user-item matrix를 생성
@@ -76,14 +75,14 @@ class ReviewLoader:
         review_df = pd.read_csv(data_dir + 'review.csv')
         review_df = review_df[review_df.placeID.isin(place_list)].reset_index(drop=True)
         review_df = review_df[['userHash', 'placeID', 'timestamp']]
-        review_df = review_df.groupby('userHash').filter(lambda x : len(x)>2)
+        review_df = review_df.groupby('userHash').filter(lambda x: len(x) > 2)
         review_df.reset_index(drop=True, inplace=True)
         self.review = review_df
         
         self.n_place = self.review.placeID.nunique()
         
         freq_df = self.review.groupby(['userHash', 'placeID']).count().reset_index().copy()
-        freq_df.rename({'timestamp':'count'}, axis=1, inplace=True)
+        freq_df.rename({'timestamp': 'count'}, axis=1, inplace=True)
         self.freq_df = freq_df
     
     def get_user_ratings(self, user_id, place2id):
@@ -98,7 +97,7 @@ class ReviewLoader:
         """
         visited_df = self.freq_df[self.freq_df['userHash'] == user_id]
         ratings = np.zeros((self.n_place,))
-        for i,v in visited_df.iterrows():
+        for i, v in visited_df.iterrows():
             visited_id = place2id[v['placeID']]
             ratings[visited_id] = v['count']
         return ratings
@@ -108,10 +107,9 @@ class ContentBasedRecommender:
     """음식점 metadata를 이용한 추천모델 (Content-Based)
     """
     def __init__(self, data_dir, filename):
-        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir,filename)
-        self.cossim = cosine_similarity(np.array(self.place_emb))
+        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir, filename)
+        self.cossim = cosine_similarity(self.place_emb)
         self.map_loader = MapLoader(data_dir=data_dir)
-
     
     def get_nearest_cossim(self, nearest_list, place_id, k=5):
         """metapath2vec을 통한 음식점의 embedding vector가 유사한 k개의 음식점을 추천
@@ -128,8 +126,7 @@ class ContentBasedRecommender:
         nearest_cossim = self.cossim[place_id, nearest_ids[:]]
         topk = np.argsort(nearest_cossim)[::-1][1:k+1]
         return [self.id2place[nearest_ids[i]] for i in topk]
-    
-    
+
     def recommend(self, coor, place_id):
         """유저의 현재 위경도 좌표를 기반으로 선택한 음식점과 가장 유사한 K개의 음식점 추천(Metapath2vec 임베딩기반)
 
@@ -149,8 +146,8 @@ class CollaborativeRecommender:
     """User 방문정보를 이용한 추천모델(Item-Based Collaborating Filtering)
     """
     def __init__(self, data_dir, filename):
-        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir,filename)
-        self.cossim = cosine_similarity(np.array(self.place_emb))
+        self.id2place, self.place2id, self.place_emb = create_embedding_file(data_dir, filename)
+        self.cossim = cosine_similarity(self.place_emb)
         self.map_loader = MapLoader(data_dir=data_dir)
         self.review_loader = ReviewLoader(data_dir=data_dir, place_list=self.map_loader.place.placeID.unique())
         
@@ -160,7 +157,6 @@ class CollaborativeRecommender:
         
         temp = self.map_loader.place.copy()
         self.map_loader.place = temp[temp.placeID.isin(self.review_loader.review.placeID.unique())].reset_index(drop=True)
-
 
     def recommend(self, coor, user_id, k=5):
         """_summary_
@@ -187,7 +183,7 @@ class CollaborativeRecommender:
             total_sr = np.dot(s, ratings[indices])
             total_s = np.sum(s)
             
-            pred_un = total_sr/total_s
+            pred_un = total_sr / total_s
             preds.append(pred_un)
 
         for idx in np.argsort(preds)[::-1][:k]:
