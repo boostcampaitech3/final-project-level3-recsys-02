@@ -10,7 +10,12 @@ import pandas as pd
 import pickle
 
 
-def train(args):
+def train(args:argparse.ArgumentParser):
+    """Metapath2Vec 학습을 위한 코드
+
+    Args:
+        args (argparse.ArgumentParser): Metapath2Vec 학습 시 필요한 변수들이 담긴 객체
+    """
     if args.make_metapath:
         with open(args.data_dir + 'food.pickle', 'rb') as f :
             raw_df = pickle.load(f)
