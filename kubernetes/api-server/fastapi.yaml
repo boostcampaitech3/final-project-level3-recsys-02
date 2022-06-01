@@ -329,12 +329,12 @@ data:
       <!DOCTYPE html>
       <head>    
           <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
-  
+
               <script>
                   L_NO_TOUCH = false;
                   L_DISABLE_3D = false;
               </script>
-  
+
           <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
           <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
           <script src="https://cdn.jsdelivr.net/npm/leaflet@1.6.0/dist/leaflet.js"></script>
@@ -347,29 +347,80 @@ data:
           <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
           <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
           <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
-  
+
                   <meta name="viewport" content="width=device-width,
                       initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
                   <style>
                       #map_5d0c3cd8484d4f8a1642815f065b1271 {
                           position: relative;
                           width: 100.0%;
-                          height: 80.0%;
-                          left: 0.0%;
-                          top: 0.0%;
+                          height: 55.0%;
+                      }
+
+                      .inference {
+                          position: relative;
+                          width: 99.0%;
+                          height: 10.0%;
+                          background-color: rgba(64, 126, 255, 0.5);
+                          border-style: none;
+                          border-radius: 10px;
+                          margin: 1.0% 0.5% 1.0% 0.5%;
+                          padding: 1.0% 1.0% 1.0% 1.0%;
+                          width: 99%;
+                          font-size: 36px;
+                      }
+
+                      .inference:hover {
+                          background-color: rgba(64, 126, 255, 0.8);
+                      }
+
+                      .placeInfo {
+                          position: relative;
+                          width: 99.0%;
+                          height: 30.0%;
+                          overflow: scroll;
+                      }
+
+                      .placeDetails {
+                          background-color: rgba(64, 255, 255, 0.2);
+                          border-style: none;
+                          border-radius: 10px;
+                          margin: 0.5% 1.0% 0.5% 1.0%;
+                          padding: 1.0% 1.0% 1.0% 1.0%;
+                          text-align: left;
+                          font-size: 16px;
+                          align-items: end;
+                      }
+
+                      .placeDetails:hover {
+                          background-color: rgba(64, 255, 255, 0.5);
+                      }
+
+                      .like {
+                          background-color: rgba(255, 255, 128, 0.5);
+                          border-style: none;
+                          border-radius: 10px;
+                          margin: 0.0% 0.0% 0.0% 30.0%;
+                          padding: 0.2% 20.0% 0.2% 20.0%;
+                          font-size: 24px;
+                      }
+
+                      .like:hover {
+                          background-color: rgba(255, 255, 128, 1.0);
                       }
                   </style>
       </head>
       <body>
                   <div class="folium-map" id="map_5d0c3cd8484d4f8a1642815f065b1271" ></div>
-  
-                  <p></p>
-                      <button onclick="inference()"> 추천 </button>
-                  <p id="current"></p>
-  
+
+                  <div>
+                      <button class="inference" onclick="inference()"> 추천 </button>
+                  </div>
+
+                  <div class="placeInfo"></div>
       </body>
       <script>
-  
+
                   var mapapi = L.map(
                       "map_5d0c3cd8484d4f8a1642815f065b1271",
                       {
@@ -378,63 +429,101 @@ data:
                           zoom: 17,
                           zoomControl: true,
                           preferCanvas: false,
-                          bottom: "5%",
                       }
-                  )
-                  .on('popupopen', function(e) {
-                      console.log(e);
-                  });
-  
-                  var markers = {
-                      results: [],
+                  );
+
+                  var states = {
+                      layers: {},
+                      preferences: new Set(),
                   };
-  
+
                   var tile_layer_0a4787307dbd68cc33a93ae4432df960 = L.tileLayer(
                       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                       {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
                   ).addTo(mapapi);
-  
-                  function removeMarkers() {
-                      if (markers.results) {
-                          for (marker of markers.results) {
-                              marker.remove();
+
+                  // remove previously drawn markers and divs
+                  function removeLayers() {
+                      var isEmpty = Object.keys(states.layers).length === 0;
+
+                      if (!isEmpty) {
+                          for ([key, value] of Object.entries(states.layers)) {
+                              for (obj of value) {
+                                  obj.remove();
+                              }
+                              delete key;
                           }
                       }
                   }
-  
+
+                  function addMarker(key, value) {
+                      // add a marker
+                      var marker = L.marker([value.latitude, value.longitude]).addTo(mapapi);
+
+                      // a popup bound to the marker
+                      var popup = L.popup().setContent(key);
+                      marker.bindPopup(popup);
+
+                      return marker;
+                  }
+
+                  function addDetails(key, value) {
+                      var placeInfo = document.getElementsByClassName("placeInfo")[0];
+
+                      // add details.
+                      var placeDetails = document.createElement("div");
+                      placeDetails.setAttribute("class", "placeDetails");
+                      placeDetails.setAttribute("id", key);
+                      placeDetails.appendChild(document.createTextNode(value.name));
+                      placeDetails.onclick = function() {
+                          states.layers[this.id][0].openPopup();
+                      }
+                      placeInfo.appendChild(placeDetails);
+
+
+                      // add a like button.
+                      var like = document.createElement("button");
+                      like.setAttribute("class", "like");
+                      like.setAttribute("id", key);
+                      like.appendChild(document.createTextNode("좋아요!"));
+                      like.onclick = function() {
+                          states.preferences.add(this.id);
+                          console.log(states.preferences);
+                      }
+                      placeDetails.appendChild(like);
+
+                      return placeDetails;
+                  }
+
                   function dataHandler(data) {
                       if (data.status) {
                           // remove previous markers.
-                          removeMarkers();
-  
-                          // parse json data and draw new markers on the map.
+                          removeLayers();
+
+                          // parse json data and add layers.
                           const places = JSON.parse(data.data);
                           for (const [key, value] of Object.entries(places)) {
-  
-                              // a marker object
-                              var marker = L.marker([value.latitude, value.longitude]).addTo(mapapi);
-  
-                              // a popup bound to the marker
-                              var popup = L.popup()
-                                  .setContent(value.name);
-                              marker.bindPopup(popup);
-                              markers.results.push(marker);
+                              // add a layer
+                              var marker = addMarker(key, value);
+                              var details = addDetails(key, value);
+                              states.layers[key] = [marker, details];
                           }
                       }
                       else {
                           alert(data.data);
                       }
                   }
-  
+
                   function inference() {
                       var center = mapapi.getCenter();
-  
+
                       fetch(
                           "http://61.254.240.172:30000/inference", {
                               method: "POST",
                               body: JSON.stringify({
                                   "latitude": center.lat,
                                   "longitude": center.lng,
+                                  "preferences": Array.from(states.preferences),
                               })
                           })
                           .then((response) => response.json())
@@ -445,7 +534,7 @@ data:
                               alert(error);
                           });
                   }
-  
+
       </script>
 ---
 apiVersion: apps/v1
