@@ -3,26 +3,19 @@ import asyncio
 import json
 from modules.broker import Broker
 from modules.events import ServerLog
-from models.model import CossimRecommender
-import pickle
+import random
 
 
-async def main(kwargs):
+async def main(kwargs: argparse.Namespace):
     logger = ServerLog()
     broker = Broker(kwargs.host, logger)
     await broker.connect()
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
-    await broker.createBucket('inference')
+    await broker.createBucket('test')
 
-    """
-    Model 인스턴스 여기에 생성해주세요.
-    """
-    
-    model = CossimRecommender('/opt/ml/final-project-level3-recsys-02/data/')
-    
     while True:
         try:
-            batch = await broker.pull(kwargs.batch)
+            batch = await broker.pull(kwargs.batch, timeout=0.5)
 
             """
             여기 inference logic 넣어주세요.
@@ -31,10 +24,18 @@ async def main(kwargs):
 
             if batch:
                 for headers, data in batch:
-                    topk = model.recommend((data['lon'], data['lat']), data['placeID'])
-                    data['topk'] = topk
-                    
-                    await broker.createKey(key=headers['key'], value=json.dumps(data, ensure_ascii=False).encode())
+                    key = headers.get('key')
+                    payload = {}
+
+                    for index in range(10):
+                        placeInfo = {
+                            'name': str(index),
+                            'latitude': data['latitude'] + random.uniform(-0.001, 0.001),
+                            'longitude': data['longitude'] + random.uniform(-0.001, 0.001),
+                        }
+                        payload[index] = placeInfo
+                    data = json.dumps(payload, ensure_ascii=False).encode()
+                    await broker.createKey(key=key, value=data)
         except:
             import traceback
             print(traceback.format_exc())
