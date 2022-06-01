@@ -15,10 +15,11 @@ async def main(kwargs: argparse.Namespace):
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
     await broker.createBucket('inference')
 
-    pp = PopularityRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'pu_embeddings_1km') 
-    cb = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'final_embeddings')
+    pp = PopularityRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'final_embeddings') 
+    cb = ContentBasedRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'nptpm_embeddings')
     cf = NoRatingCollaborativeRecommender('/opt/ml/final-project-level3-recsys-02/data/', 'pu_embeddings_1km')
-
+    placedf = cb.map_loader.place[['placeID','placeName','map']]
+    # print(placedf)
     while True:
         try:
             batch = await broker.pull(kwargs.batch, timeout=0.5)
@@ -37,32 +38,34 @@ async def main(kwargs: argparse.Namespace):
                     """
                     유저 아이디 가져오는 부분이랑 결과 리턴 사이에서 inference logic 이 실행
                     """
-                    
+                    topk=[]
+                    print(data)
+                    # print(data['preferences'])
                     coor = (data['longitude'], data['latitude'])
                     if len(data['preferences']) == 0:
-                        topk = pp.recommend(coor, k=10)
+                        topk += pp.recommend(coor, k=10)
                     elif len(data['preferences']) < 3:
                         for preference in data['preferences']:
-                            topk = cb.recommend(coor, preference, k=int(10/len(data['preferenes'])))
+                            topk += cb.recommend(coor, preference, k=int(10/len(data['preferences'])))
                     else :
-                        topk = cb.recommend(coor, data['preferences'][-1], k=5)
-                        cf_topk = cf.recommend(coor, data['preferences'], k=5)
-                        topk.extend(cf_topk)
-
+                        topk += cb.recommend(coor, data['preferences'][-1], k=5)
+                        topk += cf.recommend(coor, data['preferences'], k=5)
+                        # topk.extend(cf_topk)
+                    print(topk)
                     for place in topk:
                         # print(place)
                         PlaceInfo = {}
-                        PlaceInfo['name'] = place
-                        lon, lat = pp.map_loader.place[pp.map_loader.place['placeID'] == place]['map'].values[0]
+                        PlaceInfo['name'] = placedf[placedf['placeID'] == place]['placeName'].values[0]
+                        lon, lat = placedf[placedf['placeID'] == place]['map'].values[0]
                         PlaceInfo['latitude'] = lat
                         PlaceInfo['longitude'] = lon
                         payload[place] = PlaceInfo
 
                     # 결과 리턴
-                    print(payload)
-                    data = json.dumps(payload, ensure_ascii=False).encode()
+                    # print(payload)
+                    result = json.dumps(payload, ensure_ascii=False).encode()
 
-                    await broker.createKey(key=key, value=data)
+                    await broker.createKey(key=key, value=result)
         except:
             import traceback
             print(traceback.format_exc())
