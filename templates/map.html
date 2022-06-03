@@ -45,8 +45,8 @@
 
                 .button {
                     position: relative;
-                    width: 96.0%;
-                    margin: auto;
+                    width: 98.0%;
+                    margin: 1.0% 3.5% 1.0% 0.5%;
                 }
 
                 .inference {
@@ -88,13 +88,12 @@
                     width: 95.0%;
                     height: 35.0%;
                     overflow: scroll;
-                    margin: auto;
+                    margin: 0.5% 1.0% 0.5% 0.5%;
                 }
 
                 .placeInfo::-webkit-scrollbar  {
                     background-color: white;
                     border-radius: 10px;
-
                 }
 
                 .placeInfo::-webkit-scrollbar-thumb  {
@@ -129,7 +128,8 @@
                     margin: 0.5% 0.5% 0.5% 0.0%;
                     padding: 0.5% 0.5% 0.5% 0.5%;
                     font-size: 2.5em;
-                    display: inline-block;                }
+                    display: inline-block;
+                }
 
                 .like:active {
                     background: #DB8258;
@@ -140,7 +140,7 @@
                     width: 100.0%;
                     border-style: none none solid none;
                     border-color: #f2f0f5;
-                    border-width: 0.01em;
+                    border-width: 0.2em;
                 }
 
             </style>
@@ -174,12 +174,36 @@
                 layers: {}, //fetch 해서 받은 것 들어옴
                 preferencesList: new Array(), // 좋아요 순서대로 저장
                 preferences: new Set(),
+                currentMarker: -1, // 현재 위치 마크
+                prevSelect: {key: -1, latitude: 37.476559992, longitude: 126.981638570}, // 이전 선택 마크
+                standardMarker: -1 // 추천 시 고정 기준 좌표
             };
 
-            // current location marker
-            var currentMarker = L.marker(
-                [37.476559992, 126.981638570]
+            // mark icon
+            var greenIcon = new L.Icon({
+              iconUrl: 'https://github.com/iyk3333/markerImage/blob/main/greenMarker.png?raw=true',
+              iconSize: [60, 65]
+            });
+
+            var orangeIcon = new L.Icon({
+              iconUrl: 'https://github.com/iyk3333/markerImage/blob/main/orangeMarker.png?raw=true',
+              iconSize: [60, 65],
+              popupAnchor: [0, -30]
+            });
+
+            var blueIcon = new L.Icon({
+              iconUrl: 'https://github.com/iyk3333/markerImage/blob/main/blueMarker.png?raw=true',
+              iconSize: [60, 65]
+            });
+
+            // initialize
+            states.currentMarker = new L.marker(
+                [37.476559992, 126.981638570], {icon: greenIcon}
             ).addTo(mapapi);
+
+            states.prevSelect = {key: -1, latitude: 37.476559992, longitude: 126.981638570};
+            states.standardMarker = -1;
+
 
             var tile_layer_0a4787307dbd68cc33a93ae4432df960 = L.tileLayer(
                 "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -189,8 +213,8 @@
             // move marker
             mapapi.addEventListener("move", function(){
                 var center = mapapi.getCenter();
-                mapapi.removeLayer(currentMarker)
-                currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
+                mapapi.removeLayer(states.currentMarker)
+                states.currentMarker = L.marker([center.lat, center.lng], {icon: greenIcon}).addTo(mapapi);
             })
 
             // remove previously drawn markers and divs
@@ -207,9 +231,42 @@
                 }
             }
 
+            function changeMarker(key, value) {
+                // add a marker
+                var marker = L.marker([value.latitude, value.longitude], {icon: orangeIcon}).addTo(mapapi);
+
+                // a popup bound to the marker
+                var popup = L.popup().setContent(key);
+                marker.bindPopup(popup);
+
+                return marker;
+            }
+
             function addMarker(key, value) {
                 // add a marker
-                var marker = L.marker([value.latitude, value.longitude]).addTo(mapapi);
+                var marker = L.marker(
+                    [value.latitude, value.longitude],
+                    {icon: blueIcon}
+                ).on('click', function(){
+                    if (states.prevSelect.key != -1) {
+                        var deleteMarker = states.layers[states.prevSelect.key][0];
+                        mapapi.removeLayer(deleteMarker);
+                        states.layers[states.prevSelect.key][0] = L.marker([states.prevSelect.latitude, states.prevSelect.longitude], {icon: blueIcon}).addTo(mapapi);
+                    }
+
+                    var deleteMarker = states.layers[key][0];
+                    mapapi.removeLayer(states.layers[key][0]);
+                    //setTimeout(1000);
+                    states.layers[key][0] = changeMarker(key, value);
+                    // state.layers[key][0].addTo(mapapi)
+                    console.log(states.layers[key][0]);
+
+                    states.prevSelect.key = key;
+                    states.prevSelect.latitude = value.latitude;
+                    states.prevSelect.longitude = value.longitude;
+
+                    states.layers[key][0].openPopup();
+                 }).addTo(mapapi);
 
                 // a popup bound to the marker
                 var popup = L.popup().setContent(key);
@@ -227,7 +284,20 @@
                 placeDetails.setAttribute("id", key);
                 placeDetails.appendChild(document.createTextNode(value.name));
                 placeDetails.onclick = function() {
-                    states.layers[this.id][0].openPopup();
+                    if (states.prevSelect.key != -1) {
+                        var deleteMarker = states.layers[states.prevSelect.key][0];
+                        mapapi.removeLayer(deleteMarker);
+                        states.layers[states.prevSelect.key][0] = L.marker([states.prevSelect.latitude, states.prevSelect.longitude], {icon: blueIcon}).addTo(mapapi);
+                    }
+                    var deleteMarker = states.layers[key][0];
+                    mapapi.removeLayer(deleteMarker);
+                    states.layers[key][0] = changeMarker(key, value);
+
+                    states.prevSelect.key = key;
+                    states.prevSelect.latitude = value.latitude;
+                    states.prevSelect.longitude = value.longitude;
+
+                    states.layers[key][0].openPopup();
                 }
                 placeInfo.appendChild(placeDetails);
 
@@ -238,15 +308,16 @@
                 like.setAttribute("id", key);
                 like.appendChild(document.createTextNode("🤍"));
                 like.onclick = function() {
-                    if(!states.preferences.has(this.id)){
+                    if(!states.preferences.has(key)){
                         if(states.preferences.size == 5){
                             var deleteValue = states.preferencesList[0];
                             states.preferencesList.shift();
                             states.preferences.delete(deleteValue);
                         }
-                        states.preferences.add(this.id);
-                        states.preferencesList.push(this.id);
+                        states.preferences.add(key);
+                        states.preferencesList.push(key);
                     }
+
                     console.log(states.preferencesList)
                     console.log(states.preferences);
                 }
@@ -261,7 +332,7 @@
                 return {placeDetails, like, borders};
             }
 
-            function dataHandler(data, center) {
+            function dataHandler(data) {
                 if (data.status) {
                     // remove previous markers.
                     removeLayers();
@@ -274,6 +345,7 @@
                         var details = addDetails(key, value);
                         states.layers[key] = [marker, details.placeDetails, details.like, details.borders];
                     }
+
                 }
                 else {
                     alert(data.data);
@@ -282,8 +354,15 @@
 
             function inference() {
                 var center = mapapi.getCenter();
-                mapapi.removeLayer(currentMarker)
-                currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
+
+                if(states.standardMarker == -1){
+                    states.standardMarker = L.marker([center.lat, center.lng], {icon: greenIcon}).addTo(mapapi);
+                }
+                else{
+                    mapapi.removeLayer(states.standardMarker)
+                    states.standardMarker = L.marker([center.lat, center.lng], {icon: greenIcon}).addTo(mapapi);
+                }
+
                 fetch(
                     "http://127.0.0.1:8000/inference", {
                         method: "POST",
@@ -295,7 +374,7 @@
                     })
                     .then((response) => response.json())
                     .then((data) => {
-                        dataHandler(data, center);
+                        dataHandler(data);
                     })
                     .catch((error) => {
                         alert(error);
@@ -303,6 +382,7 @@
 
                 // initialize
                 $('div').scrollTop(0);
+                states.prevSelect.key = -1;
 
             }
 
@@ -317,13 +397,14 @@
 
             // get current location
             function gps() {
+                //removeLayers()
                 if (navigator.geolocation) {
-                    mapapi.removeLayer(currentMarker)
+                    mapapi.removeLayer(states.currentMarker)
                     navigator.geolocation.getCurrentPosition(getLocation);
                 }
                 else {
                     console.log("you can't get your current location")
                 }
             }
-        
+
 </script>
