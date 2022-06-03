@@ -443,7 +443,7 @@ data:
                           display: inline-block;
                       }
 
-                      .placeDetails:hover {
+                      .placeDetails:active {
                           background: #B06BAB;
                       }
 
@@ -459,7 +459,7 @@ data:
                           font-size: 2.5em;
                           display: inline-block;                }
 
-                      .like:hover {
+                      .like:active {
                           background: #DB8258;
                       }
 
@@ -500,7 +500,7 @@ data:
 
                   var states = {
                       layers: {}, //fetch 해서 받은 것 들어옴
-                      preferences_list: new Array(), // 좋아요 순서대로 저장
+                      preferencesList: new Array(), // 좋아요 순서대로 저장
                       preferences: new Set(),
                   };
 
@@ -568,14 +568,14 @@ data:
                       like.onclick = function() {
                           if(!states.preferences.has(this.id)){
                               if(states.preferences.size == 5){
-                                  var deleteValue = states.preferences_list[0];
-                                  states.preferences_list.shift();
+                                  var deleteValue = states.preferencesList[0];
+                                  states.preferencesList.shift();
                                   states.preferences.delete(deleteValue);
                               }
                               states.preferences.add(this.id);
-                              states.preferences_list.push(this.id);
+                              states.preferencesList.push(this.id);
                           }
-                          console.log(states.preferences_list)
+                          console.log(states.preferencesList)
                           console.log(states.preferences);
                       }
                       placeInfo.appendChild(like);
@@ -618,7 +618,7 @@ data:
                               body: JSON.stringify({
                                   "latitude": center.lat,
                                   "longitude": center.lng,
-                                  "preferences": states.preferences,
+                                  "preferences": Array.from(states.preferences),
                               })
                           })
                           .then((response) => response.json())
@@ -630,8 +630,6 @@ data:
                           });
 
                       // initialize
-                      states.preferences = new Set()
-                      states.preferences_list = new Array()
                       $('div').scrollTop(0);
 
                   }
