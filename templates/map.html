@@ -94,6 +94,7 @@
                 .placeInfo::-webkit-scrollbar  {
                     background-color: white;
                     border-radius: 10px;
+
                 }
 
                 .placeInfo::-webkit-scrollbar-thumb  {
@@ -104,7 +105,7 @@
                 .placeDetails {
                     position: relative;
                     width: 88%;
-                    background-color: #f2e6ff;
+                    background-color: #ffffff;
                     border-style: none;
                     border-radius: 10px;
                     margin: 0.5% 1.0% 0.5% 0.5%;
@@ -128,11 +129,18 @@
                     margin: 0.5% 0.5% 0.5% 0.0%;
                     padding: 0.5% 0.5% 0.5% 0.5%;
                     font-size: 2.5em;
-                    display: inline-block;
-                }
+                    display: inline-block;                }
 
                 .like:hover {
                     background: #DB8258;
+                }
+
+                .borders {
+                    position: relative;
+                    width: 100.0%;
+                    border-style: none none solid none;
+                    border-color: #f2f0f5;
+                    border-width: 0.01em;
                 }
 
             </style>
@@ -168,6 +176,7 @@
                 preferences: new Set(),
             };
 
+            // current location marker
             var currentMarker = L.marker(
                 [37.476559992, 126.981638570]
             ).addTo(mapapi);
@@ -176,6 +185,13 @@
                 "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
             ).addTo(mapapi);
+
+            // move marker
+            mapapi.addEventListener("move", function(){
+                var center = mapapi.getCenter();
+                mapapi.removeLayer(currentMarker)
+                currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
+            })
 
             // remove previously drawn markers and divs
             function removeLayers() {
@@ -236,7 +252,13 @@
                 }
                 placeInfo.appendChild(like);
 
-                return {placeDetails, like};
+                // add border line
+                var borders = document.createElement("div");
+                borders.setAttribute("class", "borders");
+                borders.setAttribute("id", key);
+                placeInfo.appendChild(borders);
+
+                return {placeDetails, like, borders};
             }
 
             function dataHandler(data, center) {
@@ -250,7 +272,7 @@
                         // add a layer
                         var marker = addMarker(key, value);
                         var details = addDetails(key, value);
-                        states.layers[key] = [marker, details.placeDetails, details.like];
+                        states.layers[key] = [marker, details.placeDetails, details.like, details.borders];
                     }
                 }
                 else {
@@ -288,21 +310,17 @@
 
             // get current location success
             function getLocation(position) {
-                // delete current location marker
-                mapapi.removeLayer(currentMarker)
-
                 // get current location and move map
                 const lat  = position.coords.latitude;
                 const lng = position.coords.longitude;
                 mapapi.setView([lat, lng], 17)
 
-                // add current location marker
-                currentMarker = L.marker([lat, lng]).addTo(mapapi);
             }
 
             // get current location
             function gps() {
                 if (navigator.geolocation) {
+                    mapapi.removeLayer(currentMarker)
                     navigator.geolocation.getCurrentPosition(getLocation);
                 }
                 else {
