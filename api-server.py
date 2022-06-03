@@ -31,7 +31,7 @@ broker = Broker(HOST, logger)
 
 # subjects for debugging only
 testSubjects = [
-    'testInput',
+    'debugInput',
 ]
 
 
@@ -60,9 +60,9 @@ async def clientBasedHashing(request: Request):
 @app.on_event('startup')
 async def init():
     await broker.connect()
-    # await broker.removeStream('test')
-    await broker.createStream('test', testSubjects)
-    await broker.createBucket('test')
+    # await broker.removeStream('debug')
+    await broker.createStream('debug', testSubjects)
+    await broker.createBucket('debug')
 
 
 @app.get('/')
@@ -75,7 +75,7 @@ async def main(request: Request):
 @limiter.limit('3/second')
 async def inference(request: Request):
     payload, key = await clientBasedHashing(request)
-    ack = await broker.publish('testInput', payload, 5.0, 'test', {'key': key})
+    ack = await broker.publish('debugInput', payload, 5.0, 'debug', {'key': key})
     if ack:
         result = await getResult(key, 5.0, 0.5)
         if result:

@@ -11,7 +11,7 @@ async def main(kwargs: argparse.Namespace):
     broker = Broker(kwargs.host, logger)
     await broker.connect()
     await broker.subscribe(kwargs.durable, kwargs.stream, kwargs.subject)
-    await broker.createBucket('test')
+    await broker.createBucket('debug')
 
     while True:
         try:
