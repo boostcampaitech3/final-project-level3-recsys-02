@@ -351,71 +351,137 @@ data:
                   <meta name="viewport" content="width=device-width,
                       initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
                   <style>
+                      body{
+                          background-color: #FFFFFF;
+                      }
+
+                      .title{
+                          position: relative;
+                          width: 95.0%;
+                          height: 4.0%;
+                          margin: 0.5% 0.0% 0.5% 2.0%;
+                          color: #7E6499;
+                          font-weight: bold
+                      }
+
                       #map_5d0c3cd8484d4f8a1642815f065b1271 {
                           position: relative;
                           width: 100.0%;
                           height: 55.0%;
+                          margin: 0.5% 0.0% 0.5% 0.0%;
+                      }
+
+                      .button {
+                          position: relative;
+                          width: 96.0%;
+                          margin: auto;
                       }
 
                       .inference {
                           position: relative;
-                          width: 99.0%;
+                          width: 80.0%;
                           height: 10.0%;
-                          background-color: rgba(64, 126, 255, 0.5);
+                          background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
                           margin: 1.0% 0.5% 1.0% 0.5%;
                           padding: 1.0% 1.0% 1.0% 1.0%;
-                          width: 99%;
+                          float: left;
                           font-size: 36px;
                       }
 
                       .inference:hover {
-                          background-color: rgba(64, 126, 255, 0.8);
+                          background: #DB8258;
+                      }
+
+                      .gps {
+                          position: relative;
+                          width: 15.0%;
+                          height: 10.0%;
+                          background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
+                          border-style: none;
+                          border-radius: 10px;
+                          margin: 1.0% 1.5% 1.0% 1.5%;
+                          padding: 1.0% 1.0% 1.0% 1.0%;
+                          float: right;
+                          font-size: 36px;
+                      }
+
+                      .gps:hover {
+                          background: #DB8258;
                       }
 
                       .placeInfo {
                           position: relative;
-                          width: 99.0%;
-                          height: 30.0%;
+                          width: 95.0%;
+                          height: 35.0%;
                           overflow: scroll;
+                          margin: auto;
+                      }
+
+                      .placeInfo::-webkit-scrollbar  {
+                          background-color: white;
+                          border-radius: 10px;
+
+                      }
+
+                      .placeInfo::-webkit-scrollbar-thumb  {
+                          background-color: #f2e6ff;
+                          border-radius: 10px;
                       }
 
                       .placeDetails {
-                          background-color: rgba(64, 255, 255, 0.2);
+                          position: relative;
+                          width: 88%;
+                          background-color: #ffffff;
                           border-style: none;
                           border-radius: 10px;
-                          margin: 0.5% 1.0% 0.5% 1.0%;
-                          padding: 1.0% 1.0% 1.0% 1.0%;
-                          text-align: left;
-                          font-size: 16px;
-                          align-items: end;
+                          margin: 0.5% 1.0% 0.5% 0.5%;
+                          padding: 0.5% 0.5% 0.5% 0.5%;
+                          text-align: center;
+                          font-size: 2.5em;
+                          display: inline-block;
                       }
 
                       .placeDetails:hover {
-                          background-color: rgba(64, 255, 255, 0.5);
+                          background: #B06BAB;
                       }
 
                       .like {
-                          background-color: rgba(255, 255, 128, 0.5);
+                          position: relative;
+                          width: 10.0%;
+                          float: right;
+                          background: linear-gradient(to bottom, #B06BAB 30%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
-                          margin: 0.0% 0.0% 0.0% 30.0%;
-                          padding: 0.2% 20.0% 0.2% 20.0%;
-                          font-size: 24px;
-                      }
+                          margin: 0.5% 0.5% 0.5% 0.0%;
+                          padding: 0.5% 0.5% 0.5% 0.5%;
+                          font-size: 2.5em;
+                          display: inline-block;                }
 
                       .like:hover {
-                          background-color: rgba(255, 255, 128, 1.0);
+                          background: #DB8258;
                       }
+
+                      .borders {
+                          position: relative;
+                          width: 100.0%;
+                          border-style: none none solid none;
+                          border-color: #f2f0f5;
+                          border-width: 0.01em;
+                      }
+
                   </style>
       </head>
       <body>
+                  <h2 class="title">🔎 장소 추천</h2>
                   <div class="folium-map" id="map_5d0c3cd8484d4f8a1642815f065b1271" ></div>
 
-                  <div>
+                  <div class="button">
                       <button class="inference" onclick="inference()"> 추천 </button>
+                      <button class="gps" onclick="gps()"> 내 위치 </button>
                   </div>
+
 
                   <div class="placeInfo"></div>
       </body>
@@ -433,14 +499,27 @@ data:
                   );
 
                   var states = {
-                      layers: {},
+                      layers: {}, //fetch 해서 받은 것 들어옴
+                      preferences_list: new Array(), // 좋아요 순서대로 저장
                       preferences: new Set(),
                   };
+
+                  // current location marker
+                  var currentMarker = L.marker(
+                      [37.476559992, 126.981638570]
+                  ).addTo(mapapi);
 
                   var tile_layer_0a4787307dbd68cc33a93ae4432df960 = L.tileLayer(
                       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                       {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
                   ).addTo(mapapi);
+
+                  // move marker
+                  mapapi.addEventListener("move", function(){
+                      var center = mapapi.getCenter();
+                      mapapi.removeLayer(currentMarker)
+                      currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
+                  })
 
                   // remove previously drawn markers and divs
                   function removeLayers() {
@@ -485,17 +564,32 @@ data:
                       var like = document.createElement("button");
                       like.setAttribute("class", "like");
                       like.setAttribute("id", key);
-                      like.appendChild(document.createTextNode("좋아요!"));
+                      like.appendChild(document.createTextNode("🤍"));
                       like.onclick = function() {
-                          states.preferences.add(this.id);
+                          if(!states.preferences.has(this.id)){
+                              if(states.preferences.size == 5){
+                                  var deleteValue = states.preferences_list[0];
+                                  states.preferences_list.shift();
+                                  states.preferences.delete(deleteValue);
+                              }
+                              states.preferences.add(this.id);
+                              states.preferences_list.push(this.id);
+                          }
+                          console.log(states.preferences_list)
                           console.log(states.preferences);
                       }
-                      placeDetails.appendChild(like);
+                      placeInfo.appendChild(like);
 
-                      return placeDetails;
+                      // add border line
+                      var borders = document.createElement("div");
+                      borders.setAttribute("class", "borders");
+                      borders.setAttribute("id", key);
+                      placeInfo.appendChild(borders);
+
+                      return {placeDetails, like, borders};
                   }
 
-                  function dataHandler(data) {
+                  function dataHandler(data, center) {
                       if (data.status) {
                           // remove previous markers.
                           removeLayers();
@@ -506,7 +600,7 @@ data:
                               // add a layer
                               var marker = addMarker(key, value);
                               var details = addDetails(key, value);
-                              states.layers[key] = [marker, details];
+                              states.layers[key] = [marker, details.placeDetails, details.like, details.borders];
                           }
                       }
                       else {
@@ -516,23 +610,50 @@ data:
 
                   function inference() {
                       var center = mapapi.getCenter();
-
+                      mapapi.removeLayer(currentMarker)
+                      currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
                       fetch(
                           "http://61.254.240.172:30000/inference", {
                               method: "POST",
                               body: JSON.stringify({
                                   "latitude": center.lat,
                                   "longitude": center.lng,
-                                  "preferences": Array.from(states.preferences),
+                                  "preferences": states.preferences,
                               })
                           })
                           .then((response) => response.json())
                           .then((data) => {
-                              dataHandler(data);
+                              dataHandler(data, center);
                           })
                           .catch((error) => {
                               alert(error);
                           });
+
+                      // initialize
+                      states.preferences = new Set()
+                      states.preferences_list = new Array()
+                      $('div').scrollTop(0);
+
+                  }
+
+                  // get current location success
+                  function getLocation(position) {
+                      // get current location and move map
+                      const lat  = position.coords.latitude;
+                      const lng = position.coords.longitude;
+                      mapapi.setView([lat, lng], 17)
+
+                  }
+
+                  // get current location
+                  function gps() {
+                      if (navigator.geolocation) {
+                          mapapi.removeLayer(currentMarker)
+                          navigator.geolocation.getCurrentPosition(getLocation);
+                      }
+                      else {
+                          console.log("you can't get your current location")
+                      }
                   }
 
       </script>
