@@ -648,7 +648,7 @@ data:
                       const center = mapapi.getCenter();
 
                       fetch(
-                          "http://127.0.0.1:8000/inference", {
+                          "http://61.254.240.172:30000/inference", {
                               method: "POST",
                               body: JSON.stringify({
                                   "latitude": center.lat,     // type: float
