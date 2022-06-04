@@ -358,8 +358,7 @@ data:
                       .title{
                           position: relative;
                           width: 95.0%;
-                          height: 4.0%;
-                          margin: 0.5% 0.0% 0.5% 2.0%;
+                          margin: 0.5% 0.0% 0.5% 3.0%;
                           color: #7E6499;
                           font-weight: bold
                       }
@@ -373,24 +372,23 @@ data:
 
                       .button {
                           position: relative;
-                          width: 96.0%;
-                          margin: auto;
+                          width: 100.0%;
+                          height: 10.0%;
+                          //margin: 1.0% 0.5% 1.0% 0.5%;
                       }
 
                       .inference {
                           position: relative;
                           width: 80.0%;
-                          height: 10.0%;
                           background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
                           margin: 1.0% 0.5% 1.0% 0.5%;
                           padding: 1.0% 1.0% 1.0% 1.0%;
                           float: left;
-                          font-size: 36px;
                       }
 
-                      .inference:hover {
+                      .inference:active {
                           background: #DB8258;
                       }
 
@@ -401,28 +399,26 @@ data:
                           background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
-                          margin: 1.0% 1.5% 1.0% 1.5%;
+                          margin: 1.0% 0.5% 1.0% 0.5%;
                           padding: 1.0% 1.0% 1.0% 1.0%;
                           float: right;
-                          font-size: 36px;
                       }
 
-                      .gps:hover {
+                      .gps:active {
                           background: #DB8258;
                       }
 
                       .placeInfo {
                           position: relative;
-                          width: 95.0%;
-                          height: 35.0%;
+                          width: 100.0%;
+                          height: 20.0%;
                           overflow: scroll;
-                          margin: auto;
+                          margin: 0.5% 1.5% 0.5% 0.5%;
                       }
 
                       .placeInfo::-webkit-scrollbar  {
                           background-color: white;
                           border-radius: 10px;
-
                       }
 
                       .placeInfo::-webkit-scrollbar-thumb  {
@@ -457,7 +453,8 @@ data:
                           margin: 0.5% 0.5% 0.5% 0.0%;
                           padding: 0.5% 0.5% 0.5% 0.5%;
                           font-size: 2.5em;
-                          display: inline-block;                }
+                          display: inline-block;
+                      }
 
                       .like:active {
                           background: #DB8258;
@@ -468,7 +465,7 @@ data:
                           width: 100.0%;
                           border-style: none none solid none;
                           border-color: #f2f0f5;
-                          border-width: 0.01em;
+                          border-width: 0.2em;
                       }
 
                   </style>
@@ -478,8 +475,8 @@ data:
                   <div class="folium-map" id="map_5d0c3cd8484d4f8a1642815f065b1271" ></div>
 
                   <div class="button">
-                      <button class="inference" onclick="inference()"> 추천 </button>
-                      <button class="gps" onclick="gps()"> 내 위치 </button>
+                      <button class="inference" onclick="inference()"></button>
+                      <button class="gps" onclick="gps()"></button>
                   </div>
 
 
@@ -498,33 +495,56 @@ data:
                       }
                   );
 
-                  var states = {
-                      layers: {}, //fetch 해서 받은 것 들어옴
-                      preferencesList: new Array(), // 좋아요 순서대로 저장
-                      preferences: new Set(),
-                  };
-
-                  // current location marker
-                  var currentMarker = L.marker(
-                      [37.476559992, 126.981638570]
-                  ).addTo(mapapi);
-
                   var tile_layer_0a4787307dbd68cc33a93ae4432df960 = L.tileLayer(
                       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                       {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
                   ).addTo(mapapi);
 
-                  // move marker
-                  mapapi.addEventListener("move", function(){
-                      var center = mapapi.getCenter();
-                      mapapi.removeLayer(currentMarker)
-                      currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
-                  })
+                  // colored markers
+                  var greenIcon = new L.Icon({
+                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/greenMarker.png?raw=true",
+                      iconSize: [25, 40],
+                  });
+
+                  var purpleIcon = new L.Icon({
+                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/purpleMarker.png?raw=true",
+                      iconSize: [30, 50],
+                      popupAnchor: [0, -23],
+                  });
+
+                  var blueIcon = new L.Icon({
+                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/blueMarker.png?raw=true",
+                      iconSize: [25, 40],
+                      popupAnchor: [0, -23],
+                  });
+
+                  var pinkIcon = new L.Icon({
+                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/pinkMarker.png?raw=true",
+                      iconSize: [25, 40],
+                  });
+
+                  var states = {
+                      layers: {},
+                      preferences: [],
+                      preferencesLen: 5,
+                      previousKey: null,
+                      centerMarker: L.marker([37.476559992, 126.981638570], {icon: greenIcon}).addTo(mapapi),
+                      currentMarker: null,
+                  };
+
+                  // map event listener for "move"
+                  mapapi.addEventListener("move", function(event) {
+                      const center = event.target.getCenter();
+                      states.centerMarker.setLatLng([center.lat, center.lng]);
+                  });
 
                   // remove previously drawn markers and divs
                   function removeLayers() {
-                      var isEmpty = Object.keys(states.layers).length === 0;
+                      if (states.currentMarker) {
+                          states.currentMarker.remove();
+                      }
 
+                      var isEmpty = Object.keys(states.layers).length === 0;
                       if (!isEmpty) {
                           for ([key, value] of Object.entries(states.layers)) {
                               for (obj of value) {
@@ -535,13 +555,28 @@ data:
                       }
                   }
 
-                  function addMarker(key, value) {
+                  function changeMarkerColor(key) {
+                      if (states.previousKey) {
+                          states.layers[states.previousKey][0].setIcon(blueIcon);
+                      }
+                      states.layers[key][0].setIcon(purpleIcon);
+                      states.previousKey = key;
+                      states.layers[key][0].openPopup();
+                  }
+
+                  function addMarker(key, value, kind) {
                       // add a marker
-                      var marker = L.marker([value.latitude, value.longitude]).addTo(mapapi);
+                      var marker = L.marker([value.latitude, value.longitude], {icon: kind, alt: key}).addTo(mapapi);
 
                       // a popup bound to the marker
                       var popup = L.popup().setContent(key);
                       marker.bindPopup(popup);
+
+                      // add a callback on a click event.
+                      marker.on("click", function(event) {
+                          console.log(event);
+                          changeMarkerColor(event.target.options.alt);
+                      });
 
                       return marker;
                   }
@@ -555,7 +590,7 @@ data:
                       placeDetails.setAttribute("id", key);
                       placeDetails.appendChild(document.createTextNode(value.name));
                       placeDetails.onclick = function() {
-                          states.layers[this.id][0].openPopup();
+                          changeMarkerColor(this.id);
                       }
                       placeInfo.appendChild(placeDetails);
 
@@ -566,27 +601,22 @@ data:
                       like.setAttribute("id", key);
                       like.appendChild(document.createTextNode("🤍"));
                       like.onclick = function() {
-                          if(!states.preferences.has(this.id)){
-                              if(states.preferences.size == 5){
-                                  var deleteValue = states.preferencesList[0];
-                                  states.preferencesList.shift();
-                                  states.preferences.delete(deleteValue);
+                          if (!states.preferences.includes(key)) {
+                              if (states.preferences.length === states.preferencesLen) {
+                                  states.preferences.shift();
                               }
-                              states.preferences.add(this.id);
-                              states.preferencesList.push(this.id);
+                              states.preferences.push(key);
                           }
-                          console.log(states.preferencesList)
-                          console.log(states.preferences);
                       }
                       placeInfo.appendChild(like);
 
-                      // add border line
-                      var borders = document.createElement("div");
-                      borders.setAttribute("class", "borders");
-                      borders.setAttribute("id", key);
-                      placeInfo.appendChild(borders);
+                      // add a borderline
+                      var border = document.createElement("div");
+                      border.setAttribute("class", "borders");
+                      border.setAttribute("id", key);
+                      placeInfo.appendChild(border);
 
-                      return {placeDetails, like, borders};
+                      return {placeDetails, like, border};
                   }
 
                   function dataHandler(data, center) {
@@ -594,13 +624,16 @@ data:
                           // remove previous markers.
                           removeLayers();
 
+                          // draw the inference request position as a marker
+                          states.currentMarker = L.marker([center.lat, center.lng], {icon: pinkIcon}).addTo(mapapi);
+
                           // parse json data and add layers.
                           const places = JSON.parse(data.data);
                           for (const [key, value] of Object.entries(places)) {
                               // add a layer
-                              var marker = addMarker(key, value);
+                              var marker = addMarker(key, value, blueIcon);
                               var details = addDetails(key, value);
-                              states.layers[key] = [marker, details.placeDetails, details.like, details.borders];
+                              states.layers[key] = [marker, details.placeDetails, details.like, details.border];
                           }
                       }
                       else {
@@ -609,16 +642,15 @@ data:
                   }
 
                   function inference() {
-                      var center = mapapi.getCenter();
-                      mapapi.removeLayer(currentMarker)
-                      currentMarker = L.marker([center.lat, center.lng]).addTo(mapapi);
+                      const center = mapapi.getCenter();
+
                       fetch(
                           "http://61.254.240.172:30000/inference", {
                               method: "POST",
                               body: JSON.stringify({
-                                  "latitude": center.lat,
-                                  "longitude": center.lng,
-                                  "preferences": Array.from(states.preferences),
+                                  "latitude": center.lat,     // type: float
+                                  "longitude": center.lng,    // type: float
+                                  "preferences": states.preferences,      // type: list
                               })
                           })
                           .then((response) => response.json())
@@ -629,9 +661,7 @@ data:
                               alert(error);
                           });
 
-                      // initialize
                       $('div').scrollTop(0);
-
                   }
 
                   // get current location success
@@ -640,17 +670,16 @@ data:
                       const lat  = position.coords.latitude;
                       const lng = position.coords.longitude;
                       mapapi.setView([lat, lng], 17)
-
                   }
 
                   // get current location
                   function gps() {
+                      //removeLayers()
                       if (navigator.geolocation) {
-                          mapapi.removeLayer(currentMarker)
                           navigator.geolocation.getCurrentPosition(getLocation);
                       }
                       else {
-                          console.log("you can't get your current location")
+                          alert("you can't get your current location")
                       }
                   }
 
