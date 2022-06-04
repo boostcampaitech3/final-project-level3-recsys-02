@@ -377,11 +377,11 @@ data:
 
                       .inference {
                           position: relative;
-                          width: 88.0%;
+                          width: 82.0%;
                           background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
-                          margin: 1.0% 0.5% 1.0% 1.0%;
+                          margin: 1.0% 1.5% 1.0% 1.0%;
                           padding: 1.0% 1.0% 1.0% 1.0%;
                       }
 
@@ -391,7 +391,7 @@ data:
 
                       .gps {
                           position: relative;
-                          width: 7.0%;
+                          width: 11.0%;
                           background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
@@ -423,7 +423,7 @@ data:
 
                       .placeDetails {
                           position: relative;
-                          width: 93%;
+                          width: 85%;
                           background-color: #ffffff;
                           border-style: none;
                           border-radius: 10px;
@@ -440,7 +440,7 @@ data:
 
                       .like {
                           position: relative;
-                          width: 4.0%;
+                          width: 10.0%;
                           background: linear-gradient(to bottom, #B06BAB 30%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
