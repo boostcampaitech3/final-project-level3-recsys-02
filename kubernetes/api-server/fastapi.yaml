@@ -366,26 +366,23 @@ data:
                       #map_5d0c3cd8484d4f8a1642815f065b1271 {
                           position: relative;
                           width: 100.0%;
-                          height: 55.0%;
+                          height: 50.0%;
                           margin: 0.5% 0.0% 0.5% 0.0%;
                       }
 
-                      .button {
+                      .buttonGroup {
                           position: relative;
-                          width: 100.0%;
-                          height: 10.0%;
-                          //margin: 1.0% 0.5% 1.0% 0.5%;
+                          width: 100%;
                       }
 
                       .inference {
                           position: relative;
-                          width: 80.0%;
+                          width: 88.0%;
                           background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
-                          margin: 1.0% 0.5% 1.0% 0.5%;
+                          margin: 1.0% 0.5% 1.0% 1.0%;
                           padding: 1.0% 1.0% 1.0% 1.0%;
-                          float: left;
                       }
 
                       .inference:active {
@@ -394,14 +391,12 @@ data:
 
                       .gps {
                           position: relative;
-                          width: 15.0%;
-                          height: 10.0%;
+                          width: 7.0%;
                           background: linear-gradient(to bottom right, #DB8258 5%, #B06BAB 70%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
-                          margin: 1.0% 0.5% 1.0% 0.5%;
+                          margin: 1.0% 1.0% 1.0% 0.5%;
                           padding: 1.0% 1.0% 1.0% 1.0%;
-                          float: right;
                       }
 
                       .gps:active {
@@ -410,10 +405,10 @@ data:
 
                       .placeInfo {
                           position: relative;
-                          width: 100.0%;
-                          height: 20.0%;
+                          width: 96.0%;
+                          height: 40.0%;
                           overflow: scroll;
-                          margin: 0.5% 1.5% 0.5% 0.5%;
+                          margin: 0.5% 0.5% 0.5% 2.0%;
                       }
 
                       .placeInfo::-webkit-scrollbar  {
@@ -428,14 +423,14 @@ data:
 
                       .placeDetails {
                           position: relative;
-                          width: 88%;
+                          width: 93%;
                           background-color: #ffffff;
                           border-style: none;
                           border-radius: 10px;
-                          margin: 0.5% 1.0% 0.5% 0.5%;
+                          margin: 0.5% 0.5% 0.5% 0.5%;
                           padding: 0.5% 0.5% 0.5% 0.5%;
                           text-align: center;
-                          font-size: 2.5em;
+                          font-size: 1.2em;
                           display: inline-block;
                       }
 
@@ -445,14 +440,12 @@ data:
 
                       .like {
                           position: relative;
-                          width: 10.0%;
-                          float: right;
+                          width: 4.0%;
                           background: linear-gradient(to bottom, #B06BAB 30%, #7E6499 100%);
                           border-style: none;
                           border-radius: 10px;
-                          margin: 0.5% 0.5% 0.5% 0.0%;
+                          margin: 0.5% 0.5% 0.5% 0.5%;
                           padding: 0.5% 0.5% 0.5% 0.5%;
-                          font-size: 2.5em;
                           display: inline-block;
                       }
 
@@ -462,10 +455,15 @@ data:
 
                       .borders {
                           position: relative;
-                          width: 100.0%;
+                          width: 98.0%;
                           border-style: none none solid none;
                           border-color: #f2f0f5;
                           border-width: 0.2em;
+                      }
+
+                      .thumbnails {
+                          width: 2.0em;
+                          height: 2.0em;
                       }
 
                   </style>
@@ -474,11 +472,14 @@ data:
                   <h2 class="title">🔎 장소 추천</h2>
                   <div class="folium-map" id="map_5d0c3cd8484d4f8a1642815f065b1271" ></div>
 
-                  <div class="button">
-                      <button class="inference" onclick="inference()"></button>
-                      <button class="gps" onclick="gps()"></button>
+                  <div class="buttonGroup">
+                      <button class="inference" onclick="inference()">
+                          <img class="thumbnails" src="https://github.com/Kanet1105/luckyseven/blob/main/assets/images/recommendation.png?raw=true">
+                      </button>
+                      <button class="gps" onclick="gps()">
+                          <img class="thumbnails" src="https://github.com/Kanet1105/luckyseven/blob/main/assets/images/current.png?raw=true">
+                      </button>
                   </div>
-
 
                   <div class="placeInfo"></div>
       </body>
@@ -502,24 +503,24 @@ data:
 
                   // colored markers
                   var greenIcon = new L.Icon({
-                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/greenMarker.png?raw=true",
+                      iconUrl: "https://github.com/Kanet1105/luckyseven/blob/main/assets/images/greenMarker.png?raw=true",
                       iconSize: [25, 40],
                   });
 
                   var purpleIcon = new L.Icon({
-                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/purpleMarker.png?raw=true",
+                      iconUrl: "https://github.com/Kanet1105/luckyseven/blob/main/assets/images/purpleMarker.png?raw=true",
                       iconSize: [30, 50],
                       popupAnchor: [0, -23],
                   });
 
                   var blueIcon = new L.Icon({
-                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/blueMarker.png?raw=true",
+                      iconUrl: "https://github.com/Kanet1105/luckyseven/blob/main/assets/images/blueMarker.png?raw=true",
                       iconSize: [25, 40],
                       popupAnchor: [0, -23],
                   });
 
                   var pinkIcon = new L.Icon({
-                      iconUrl: "https://github.com/iyk3333/markerImages/blob/main/pinkMarker.png?raw=true",
+                      iconUrl: "https://github.com/Kanet1105/luckyseven/blob/main/assets/images/pinkMarker.png?raw=true",
                       iconSize: [25, 40],
                   });
 
@@ -594,12 +595,14 @@ data:
                       }
                       placeInfo.appendChild(placeDetails);
 
-
                       // add a like button.
                       var like = document.createElement("button");
                       like.setAttribute("class", "like");
                       like.setAttribute("id", key);
-                      like.appendChild(document.createTextNode("🤍"));
+                      var thumb = document.createElement("img");
+                      thumb.setAttribute("class", "thumbnails");
+                      thumb.setAttribute("src", "https://github.com/Kanet1105/luckyseven/blob/main/assets/images/like.png?raw=true");
+                      like.appendChild(thumb);
                       like.onclick = function() {
                           if (!states.preferences.includes(key)) {
                               if (states.preferences.length === states.preferencesLen) {
@@ -645,7 +648,7 @@ data:
                       const center = mapapi.getCenter();
 
                       fetch(
-                          "http://61.254.240.172:30000/inference", {
+                          "http://127.0.0.1:8000/inference", {
                               method: "POST",
                               body: JSON.stringify({
                                   "latitude": center.lat,     // type: float
