@@ -1,9 +1,12 @@
 # 위치 기반 개인화 장소 추천
 
 ## 시연 영상
-|시연1|시연2|시연3|
+<div align="center">
+
+|<img src="https://user-images.githubusercontent.com/33798183/172856840-12d7b434-44bf-4579-8ae9-b3cb4d5eb8ea.gif">|<img src="https://user-images.githubusercontent.com/33798183/172857765-cbee7468-5cb2-4d74-9aea-56fd6cb76384.gif">|<img src="https://user-images.githubusercontent.com/33798183/172857805-af7ba33d-6783-4b4a-b066-142ff3726d5d.gif">|
 |------|---|---|
-|테스트1|테스트2|테스트3|
+  
+</div>
 
 ## 프로젝트 계기 및 소개
 1. ”아 오늘 뭐 먹지”란 고민없이 버튼만 누르면 바로바로 추천할 수 없을까?
