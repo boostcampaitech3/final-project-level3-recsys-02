@@ -154,7 +154,7 @@ class Metapath2vecDataset(Dataset):
                             assert v < self.data.word_count
                             if i == j:
                                 continue
-                            pair_catch.append((u, v, self.data.getNegatives(v, 5)))
+                            pair_catch.append((u, v, self.data.getNegatives(5)))
                     return pair_catch
 
     @staticmethod
