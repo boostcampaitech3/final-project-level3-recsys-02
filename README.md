@@ -11,7 +11,7 @@
 </div>
 
 ## 발표 영상
-|https://youtu.be/yWqgrEnchm0
+https://youtu.be/yWqgrEnchm0
 
 ## 프로젝트 계기 및 소개
 1. ”아 오늘 뭐 먹지”란 고민없이 버튼만 누르면 바로바로 추천할 수 없을까?
